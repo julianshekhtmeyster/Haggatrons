@@ -28,7 +28,7 @@
     {
       "id": 2,
       "name": "Slave 2",
-      "mac": "44:bd:8d:eb:de:00",
+      "mac": "44:bd:8d:eb:e3:94",
       "motor_flags": 0,
       "yaw_axis": 2,
       "yaw_sign": 1,
