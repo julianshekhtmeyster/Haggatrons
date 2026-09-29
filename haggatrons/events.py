@@ -30,7 +30,9 @@ class EventBus:
             raise ValueError("event data may not override id, ts, or kind")
         event = {"id": next(self._ids), "ts": time.time(), "kind": kind, **data}
         with self._lock:
-            self._history.append(event)
+            # Telemetry is live-only; kept in history it would evict every other event.
+            if not kind.startswith("telemetry"):
+                self._history.append(event)
             subscribers = list(self._subscribers)
             log = self._log
         if log and not kind.startswith("telemetry"):
@@ -48,8 +50,7 @@ class EventBus:
         with self._lock:
             if replay:
                 for event in self._history:
-                    if not event["kind"].startswith("telemetry"):
-                        subscriber.put_nowait(event)
+                    subscriber.put_nowait(event)
             self._subscribers.append(subscriber)
         return subscriber
 
@@ -60,4 +61,4 @@ class EventBus:
 
     def recent(self, limit: int = 200) -> list[dict]:
         with self._lock:
-            return [e for e in self._history if not e["kind"].startswith("telemetry")][-limit:]
+            return list(self._history)[-limit:]

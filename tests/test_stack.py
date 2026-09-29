@@ -179,3 +179,13 @@ def test_move_refused_for_offline_robot(stack):
     controller.armed = True
     with pytest.raises(FleetError, match="no recent telemetry"):
         controller.move(1, p.MoveCommand(p.MOVE_TURN, 400, 400, 1000, 30))
+
+
+def test_telemetry_does_not_evict_event_history():
+    from haggatrons.events import EventBus
+
+    bus = EventBus(history=10)
+    bus.publish("link", state="lost", reason="unplugged")
+    for _ in range(100):
+        bus.publish("telemetry", robot_id=1)
+    assert [e["kind"] for e in bus.recent()] == ["link"]
