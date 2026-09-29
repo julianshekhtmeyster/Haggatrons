@@ -1,6 +1,8 @@
 # Haggatrons
 
-An initial two-robot exploration prototype for a planned four-bot build, with three connected parts:
+An initial two-robot exploration prototype for a planned four-bot build, with these components:
+
+Start with [PRODUCT.md](PRODUCT.md) for the intended robot team and [CONTEXT.md](CONTEXT.md) for verified progress and next milestones.
 
 - `sim.py` explores a grid with two simulated robots, a shared map, distinct target assignments, and a movement safety gate. It needs only Python 3.11+.
 - `run_flower.py` runs the same coordination loop through two Flower workers. It can optionally send one saved camera frame to an OpenAI observer. This proposal is logged; it does not drive the robots.
