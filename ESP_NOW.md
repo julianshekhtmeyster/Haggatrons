@@ -4,7 +4,7 @@ ESP-NOW addresses each board by its Wi-Fi station MAC, which is the base MAC rep
 
 | Board | Chip | MAC (station) | Read on |
 | --- | --- | --- | --- |
-| Master | W11 ESP32-S3 | recorded by `provision master` | — |
+| Master | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:de:b0` | 2026-09-29, `/dev/cu.usbmodem101` |
 | Slave 1 (robot 1) | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:e1:dc` | 2026-09-29, `/dev/cu.usbmodem101` |
 | Slave 2 (robot 2) | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:de:00` | 2026-09-29, `/dev/cu.usbmodem101` |
 

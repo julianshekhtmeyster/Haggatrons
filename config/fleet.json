@@ -2,7 +2,7 @@
   "channel": 1,
   "master": {
     "board": "Meshnology W11 (ESP32-S3)",
-    "mac": null
+    "mac": "44:bd:8d:eb:de:b0"
   },
   "calibration": {
     "forward_mps_at_full_speed": 0.3,
@@ -19,7 +19,11 @@
       "motor_flags": 0,
       "yaw_axis": 2,
       "yaw_sign": 1,
-      "start_pose": [0.4, 0.5, 0]
+      "start_pose": [
+        0.4,
+        0.5,
+        0
+      ]
     },
     {
       "id": 2,
@@ -28,7 +32,11 @@
       "motor_flags": 0,
       "yaw_axis": 2,
       "yaw_sign": 1,
-      "start_pose": [0.4, 1.0, 0]
+      "start_pose": [
+        0.4,
+        1.0,
+        0
+      ]
     }
   ]
 }

@@ -103,6 +103,7 @@ struct ActiveMove {
 } move;
 
 static bool cameraReady = false;
+static int cameraError = 0;  // esp_err_t from esp_camera_init, reported by the S command
 static bool imuReady = false;
 static bool rangeReady = false;
 static bool espNowReady = false;
@@ -568,8 +569,9 @@ static void printStatus() {
   printMac(mac);
   Serial.printf(" provisioned=%d id=%u master=", config.provisioned, config.robotId);
   printMac(config.masterMac);
-  Serial.printf(" ch=%u espnow=%d camera=%d imu=%d range=%d link=%d armed=%d\n", config.channel, espNowReady,
-                cameraReady, imuReady, rangeReady, linkOk(), armed());
+  Serial.printf(" ch=%u espnow=%d camera=%d imu=%d range=%d link=%d armed=%d psram=%d cam_err=0x%x\n",
+                config.channel, espNowReady, cameraReady, imuReady, rangeReady, linkOk(), armed(), psramFound(),
+                cameraError);
 }
 
 static void provision() {
@@ -657,8 +659,10 @@ static void initCamera() {
   pinMode(PIN_SCL, INPUT_PULLUP);
   delay(200);
   camera_config_t camera = {};
-  camera.ledc_channel = LEDC_CHANNEL_0;
-  camera.ledc_timer = LEDC_TIMER_0;
+  // The camera clock gets its own LEDC channel/timer; ledcAttach() gives the
+  // motors channels 0-1 on timer 0, which the camera must not reconfigure.
+  camera.ledc_channel = LEDC_CHANNEL_7;
+  camera.ledc_timer = LEDC_TIMER_3;
   camera.pin_d0 = PIN_D0;
   camera.pin_d1 = PIN_D1;
   camera.pin_d2 = PIN_D2;
@@ -682,7 +686,8 @@ static void initCamera() {
   camera.fb_count = psramFound() ? 2 : 1;
   camera.fb_location = psramFound() ? CAMERA_FB_IN_PSRAM : CAMERA_FB_IN_DRAM;
   camera.grab_mode = camera.fb_count == 2 ? CAMERA_GRAB_LATEST : CAMERA_GRAB_WHEN_EMPTY;
-  if (esp_camera_init(&camera) != ESP_OK) return;
+  cameraError = esp_camera_init(&camera);
+  if (cameraError != ESP_OK) return;
   sensor_t *sensor = esp_camera_sensor_get();
   if (sensor) sensor->set_framesize(sensor, FRAMESIZE_QVGA);
   frameBuffer = static_cast<uint8_t *>(ps_malloc(FRAME_CAPACITY));
@@ -709,13 +714,10 @@ void setup() {
   // Motors off before anything else can run.
   pinMode(PIN_STBY, OUTPUT);
   digitalWrite(PIN_STBY, LOW);
-  for (int pin : {PIN_AIN1, PIN_AIN2, PIN_BIN1, PIN_BIN2}) {
+  for (int pin : {PIN_AIN1, PIN_AIN2, PIN_BIN1, PIN_BIN2, PIN_PWMA, PIN_PWMB}) {
     pinMode(pin, OUTPUT);
     digitalWrite(pin, LOW);
   }
-  ledcAttach(PIN_PWMA, PWM_FREQ, PWM_BITS);
-  ledcAttach(PIN_PWMB, PWM_FREQ, PWM_BITS);
-  motorsOff();
 
   Serial.setRxBufferSize(1024);
   Serial.begin(921600);
@@ -723,6 +725,10 @@ void setup() {
   sendDone = xSemaphoreCreateBinary();
   loadConfig();
   initCamera();
+  // Motor PWM only after the camera owns its clock timer.
+  ledcAttachChannel(PIN_PWMA, PWM_FREQ, PWM_BITS, 0);
+  ledcAttachChannel(PIN_PWMB, PWM_FREQ, PWM_BITS, 1);
+  motorsOff();
   initSensors();
   startEspNow();
   Serial.println(cameraReady ? "READY CAM1 OBS1 HGBOT" : "ERR camera init");
