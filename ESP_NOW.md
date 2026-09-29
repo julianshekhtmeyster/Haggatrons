@@ -1,10 +1,13 @@
 # ESP-NOW devices and link
 
+**Every W11 needs its external antenna fitted** (the connector at the bottom left of the board). Without it the boards barely hear each other (about −97 dBm at desk range).
+
 ESP-NOW addresses each board by its Wi-Fi station MAC, which is the base MAC reported by `esptool read_mac`. The canonical list is `config/fleet.json`. `python -m haggatrons provision master` writes the master's MAC there.
 
 | Board | Chip | MAC (station) | Notes |
 | --- | --- | --- | --- |
-| Master | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:e3:94` | Flashed and provisioned 2026-09-29 |
+| Master | ESP32-S3 dev board (QFN56) rev v0.2, 16 MB flash, 8 MB PSRAM | `ec:da:3b:57:78:14` | Flashed 2026-09-29; robot 2 link verified (−42 dBm, 640×480 frame in 0.46 s) |
+| Spare | W11 ESP32-S3 | `44:bd:8d:eb:e3:94` | Former master; needs its antenna fitted |
 | Robot 1 | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:de:b0` | Camera (OV3660) and IMU verified 2026-09-29 |
 | Robot 2 | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:e1:dc` | Camera (OV3660) and IMU verified 2026-09-29 |
 | Spare | ESP32-S3 | `44:bd:8d:eb:de:00` | Not in the fleet: camera detected but never delivers image data |
