@@ -8,6 +8,7 @@ arduino-cli.zip
 arduino-cli.yaml
 arduino-sketchbook/
 firmware/usb_camera/build/
+firmware/wifi_robot/build/
 .env
 runs/
 captures/

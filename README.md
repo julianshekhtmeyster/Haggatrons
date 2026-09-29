@@ -1,12 +1,13 @@
 # Haggatrons
 
-A two robot exploration prototype with three connected parts:
+An initial two-robot exploration prototype for a planned four-bot build, with three connected parts:
 
 - `sim.py` explores a grid with two simulated robots, a shared map, distinct target assignments, and a movement safety gate. It needs only Python 3.11+.
 - `run_flower.py` runs the same coordination loop through two Flower workers. It can optionally send one saved camera frame to an OpenAI observer. This proposal is logged; it does not drive the robots.
 - `perception_harness.py` reads a JPEG and IMU sample from an ESP32 camera over USB, optionally requests a visual proposal from OpenAI, and saves results in `runs/`.
+- `firmware/wifi_robot` and `wireless_capture.py` provide battery-powered camera and IMU capture over the same Wi-Fi network as the Mac. See [WIRELESS_ROBOT.md](WIRELESS_ROBOT.md).
 
-There are no motor commands in this project. The grid sensor is simulated; a real camera frame does not update the grid map. See [HARNESS.md](HARNESS.md) for the USB protocol and [CAMERA_SETUP.md](CAMERA_SETUP.md) for the firmware.
+There are no motor commands in this project yet. The grid sensor is simulated; a real camera frame does not update the grid map. See [HARNESS.md](HARNESS.md) for the USB protocol and [CAMERA_SETUP.md](CAMERA_SETUP.md) for the bench firmware.
 
 ## Setup
 

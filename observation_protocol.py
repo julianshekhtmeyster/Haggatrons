@@ -77,3 +77,16 @@ def read_observation(port, timeout: float = 15.0) -> Observation:
     if not (jpeg.startswith(b"\xff\xd8") and jpeg.endswith(b"\xff\xd9")):
         raise ValueError("Board returned an incomplete JPEG")
     return Observation(jpeg, frame_ms, imu_ms, bool(valid), (ax, ay, az), (gx, gy, gz))
+
+
+def decode_observation(payload: bytes) -> Observation:
+    """Decode one complete OBS1 payload from the wireless endpoint."""
+    if len(payload) < HEADER.size:
+        raise ValueError("Observation header is incomplete")
+    magic, length, frame_ms, imu_ms, valid, ax, ay, az, gx, gy, gz = HEADER.unpack_from(payload)
+    if magic != MAGIC or length <= 0 or length > MAX_FRAME:
+        raise ValueError("Invalid OBS1 header")
+    jpeg = payload[HEADER.size:]
+    if len(jpeg) != length or not (jpeg.startswith(b"\xff\xd8") and jpeg.endswith(b"\xff\xd9")):
+        raise ValueError("Observation JPEG is incomplete")
+    return Observation(jpeg, frame_ms, imu_ms, bool(valid), (ax, ay, az), (gx, gy, gz))
