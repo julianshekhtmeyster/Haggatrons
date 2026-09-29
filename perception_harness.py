@@ -17,7 +17,7 @@ from pathlib import Path
 from PIL import Image
 import serial
 
-from flower_explore.openai_observer import (
+from haggatrons.observer import (
     MODEL as OPENAI_MODEL, INSTRUCTIONS as OPENAI_INSTRUCTIONS,
     load_api_key as load_openai_key, observe_jpeg,
 )

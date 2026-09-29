@@ -16,3 +16,6 @@ captures/
 .venv/
 .flwr/
 *.fab
+firmware/*/build/
+app/node_modules/
+app/dist/

@@ -1,6 +1,6 @@
 # Haggatrons engineering context
 
-Updated 2026-09-29. This is the handoff document for the current repository state. [PRODUCT.md](PRODUCT.md) defines the intended behavior; this file separates working code from work still to do.
+Updated 2026-09-29 (ESP-NOW control center branch). This is the handoff document for the current repository state. [PRODUCT.md](PRODUCT.md) defines the intended behavior; this file separates working code from work still to do.
 
 ## Decisions from the project discussion
 
@@ -13,29 +13,27 @@ Updated 2026-09-29. This is the handoff document for the current repository stat
 
 ## Verified repository state
 
-| Area | What is working | What is not yet working |
-| --- | --- | --- |
-| Simulation | `sim.py` has a grid world, shared map, frontier assignments, and a movement safety gate. | Its poses and obstacles are simulated, not estimated from hardware. |
-| Flower | `run_flower.py` runs two `ClientApp` workers with a `ServerApp` coordinator; workers observe and propose and the server gates simulated moves. | It expects exactly two simulated nodes. It does not command physical motors. |
-| Camera and IMU | The W11 firmware returned a 640×480 JPEG and valid QMI8658 IMU data after flashing the wireless sketch. `OBS1` carries a frame, timestamps, and six raw IMU values. | IMU values are not fused into position or a physical map. |
-| Visual model | One live `gpt-6-luna` image request succeeded with structured output. The observer validates a bounded action proposal. | The proposal is only logged. It does not change the map or actuate a robot. |
-| Wireless | `firmware/wifi_robot/wifi_robot.ino` is flashed and compiled. `provision_robot.py` and `wireless_capture.py` provide one-bot setup and capture tools. | No battery-powered, unplugged end-to-end capture has been verified yet. The current tools are a prototype, not a multi-bot transport. |
-| Motors | The TB6612FNG signal requirements and a possible W11 GPIO map are documented in `WIRELESS_ROBOT.md`. | Actual wiring, power limits, motor firmware, watchdog, and movement tests remain unverified. Motor outputs are disabled in the current sketch. |
+Branch `feature/espnow-control-center` replaces the Wi-Fi/HTTP prototype with an ESP-NOW fleet. A master ESP32 plugged into the Mac relays to the robots, and an Electron control centre supervises. See [README.md](README.md), [ESP_NOW.md](ESP_NOW.md) and [PINOUT.md](PINOUT.md).
 
-The latest wireless code was committed and pushed as `5ac8486` (`Feature: Add wireless W11 capture harness`). The local factory flash backup is ignored by Git. The project `.env` and `runs/` are also ignored. Never copy secret values into this document or commit them.
+| Area | Verified | Not yet verified |
+| --- | --- | --- |
+| Firmware | `firmware/master` and `firmware/robot` compile for the W11 (Arduino ESP32 core 3.3.11, SensorLib 0.3.1, Pololu VL53L0X). | Not yet flashed to the boards. No ESP-NOW range or throughput measurements. |
+| Protocol | The C header and the Python mirror are checked against each other by compiling the header in tests (struct sizes, constants, COBS, CRC). | — |
+| Backend | 23 tests pass against the simulated master and robots: frame reassembly with dropped chunks, arming, e-stop, host-silence watchdog, clearance stop, pause, full local mission. | Not run against real hardware. |
+| Flower | ServerApp/ClientApp rewritten: one worker per robot; observe → assign → decide → gate → execute. | Not executed yet: `flwr[simulation]` could not be installed on the build network. Run `python -m haggatrons mission --sim` once dependencies are installed. |
+| Control centre | Electron + React UI typechecks and builds. Smoke mode: `HAGGATRONS_SMOKE=out.png npm start`. | Not launched yet (the Electron binary download did not finish). |
+| Motors | Firmware drives the TB6612 per PINOUT.md, with STBY low at boot, capped speed and duration, a heartbeat watchdog, a range-guarded forward move, and IMU-measured turns. | Wiring must be changed to PINOUT.md. Motor polarity, yaw sign and speed calibration still need the wheels-off-the-floor checks. |
+| Localization | Dead reckoning from gyro yaw and commanded speed × time, with a growing uncertainty. The shared map uses range-sensor rays plus weak vision evidence. | No wheel encoders; pose drifts. Robots must start at the poses in `config/fleet.json`. |
+
+Removed: `firmware/wifi_robot`, `provision_robot.py`, `wireless_capture.py`, `run_flower.py`, `WIRELESS_ROBOT.md`, `FLOWER.md`.
 
 ## Code map
 
-- `sim.py`: grid world, simulated robot workers, shared-map coordinator, and safety gate.
-- `flower_explore/server_app.py`: Flower server exchange, merging observations, target assignments, movement gate, and run summary.
-- `flower_explore/client_app.py`: two simulated workers; optionally asks the visual observer about one saved JPEG.
-- `flower_explore/openai_observer.py`: OpenAI Responses request, `gpt-6-luna` model choice, structured schema, and validation.
-- `observation_protocol.py`: paired camera/IMU `OBS1` decoder.
-- `firmware/usb_camera/usb_camera.ino`: known bench USB camera/IMU implementation.
-- `firmware/wifi_robot/wifi_robot.ino`: current board firmware, preserving USB capture and adding an authenticated wireless observation endpoint; no motor commands.
-- `provision_robot.py`, `wireless_capture.py`: one-bot provisioning and capture tools. Their local token/IP file is Git ignored.
-- `perception_harness.py`: USB capture and optional VLM call; `runs/` contains ignored output.
-- `WIRELESS_ROBOT.md`, `CAMERA_SETUP.md`, `HARNESS.md`, `FLOWER.md`: detailed setup and protocol notes.
+- `haggatrons/protocol.py`: wire protocol mirror. `link.py`: USB serial link. `simlink.py`: simulated master and robots.
+- `haggatrons/fleet.py`: arming, e-stop, keepalives, captures, moves, pose estimates. `mission.py`: mission lifecycle and the Flower subprocess. `server.py`: local token-protected API and event stream.
+- `haggatrons/worldmap.py`: shared map, distinct goals, proposals, coordinator gate. `loop.py`: the per-tick worker and coordinator steps used by Flower.
+- `flower_explore/`: the Flower ServerApp and ClientApp. `app/`: the Electron control centre.
+- `firmware/`: master, robot, shared protocol library, and the original USB camera bench sketch.
 
 ## Hardware facts and unknowns
 

@@ -4,28 +4,39 @@ build-backend = "hatchling.build"
 
 [project]
 name = "haggatrons"
-version = "0.1.0"
-description = "Two camera robot workers coordinated with Flower"
+version = "0.2.0"
+description = "Human-supervised ESP-NOW robot fleet coordinated with Flower"
 license = { file = "LICENSE" }
 requires-python = ">=3.11,<4.0"
-dependencies = ["flwr[simulation]>=1.38.0,<2.0"]
+dependencies = [
+    "flwr[simulation]>=1.38.0,<2.0",
+    "pyserial>=3.5,<4",
+    "Pillow>=10,<13",
+]
 
 [project.optional-dependencies]
-camera = ["Pillow>=10,<13", "pyserial>=3.5,<4"]
+# Kept for older install instructions; camera support is now a core dependency.
+camera = []
+dev = ["pytest>=8"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["flower_explore"]
+packages = ["haggatrons", "flower_explore"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["flower: runs a real Flower simulation (slow)"]
 
 [tool.flwr.app]
 publisher = "local"
 fab-format-version = 1
 flwr-version-target = "1.38.0"
-fab-include = ["flower_explore/**/*.py", "sim.py", "LICENSE"]
+fab-include = ["flower_explore/**/*.py", "haggatrons/**/*.py", "config/fleet.json", "LICENSE"]
 
 [tool.flwr.app.components]
 serverapp = "flower_explore.server_app:app"
 clientapp = "flower_explore.client_app:app"
 
 [tool.flwr.app.config]
-steps = 30
-vlm-frame = ""
+steps = 8
+vision = "false"
+clearance-mm = 180

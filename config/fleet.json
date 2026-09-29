@@ -1,0 +1,34 @@
+{
+  "channel": 1,
+  "master": {
+    "board": "Meshnology W11 (ESP32-S3)",
+    "mac": null
+  },
+  "calibration": {
+    "forward_mps_at_full_speed": 0.3,
+    "cruise_speed": 450,
+    "turn_speed": 420,
+    "min_clear_mm": 180,
+    "max_speed": 600
+  },
+  "robots": [
+    {
+      "id": 1,
+      "name": "Slave 1",
+      "mac": "44:bd:8d:eb:e1:dc",
+      "motor_flags": 0,
+      "yaw_axis": 2,
+      "yaw_sign": 1,
+      "start_pose": [0.4, 0.5, 0]
+    },
+    {
+      "id": 2,
+      "name": "Slave 2",
+      "mac": "44:bd:8d:eb:de:00",
+      "motor_flags": 0,
+      "yaw_axis": 2,
+      "yaw_sign": 1,
+      "start_pose": [0.4, 1.0, 0]
+    }
+  ]
+}

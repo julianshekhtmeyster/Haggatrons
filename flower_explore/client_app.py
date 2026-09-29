@@ -1,4 +1,8 @@
-"""One Flower ClientApp runs as each simulated bot worker."""
+"""Flower ClientApp: one robot worker per SuperNode.
+
+The worker is stateless between messages: the coordinator names the robot in
+every request, and all robot I/O goes through the backend API.
+"""
 
 from __future__ import annotations
 
@@ -7,49 +11,37 @@ import json
 from flwr.app import ConfigRecord, Context, Message, RecordDict
 from flwr.clientapp import ClientApp
 
-from sim import Assignment, Coordinator, RobotWorker, World
-from flower_explore.wire import decode_cells, encode_cells
-from flower_explore.openai_observer import observe_jpeg
-
+from haggatrons.client import BackendClient
+from haggatrons.loop import decide, execute, observe
 
 app = ClientApp()
 
 
+def _request(message: Message) -> dict:
+    return json.loads(message.content["request"]["payload"])
+
+
+def _reply(message: Message, result: dict) -> Message:
+    content = RecordDict({"result": ConfigRecord({"payload": json.dumps(result, default=str)})})
+    return Message(content=content, reply_to=message)
+
+
 @app.query("observe")
-def observe(message: Message, context: Context) -> Message:
-    request = message.content["request"]
-    robot_id = int(request["robot_id"])
-    tick = int(request["tick"])
-    pose = (int(request["x"]), int(request["y"]))
-    observation = World().observe(robot_id, tick, pose)
-    result = {
-        "robot_id": robot_id,
-        "tick": tick,
-        "x": pose[0],
-        "y": pose[1],
-        "cells": encode_cells(observation.cells),
-    }
-    if "jpeg" in request:
-        decision, usage = observe_jpeg(bytes(request["jpeg"]), str(request["goal"]))
-        result["visual_decision_json"] = json.dumps(decision)
-        result["visual_usage_json"] = json.dumps(usage)
-    content = RecordDict({"result": ConfigRecord(result)})
-    return Message(content=content, reply_to=message)
+def observe_query(message: Message, context: Context) -> Message:
+    request = _request(message)
+    report = observe(BackendClient(), int(request["robot_id"]), int(request["tick"]), bool(request["vision"]))
+    return _reply(message, report)
 
 
-@app.query("propose")
-def propose(message: Message, context: Context) -> Message:
-    request = message.content["request"]
+@app.query("decide")
+def decide_query(message: Message, context: Context) -> Message:
+    request = _request(message)
+    return _reply(message, decide(request["report"], request["goal"], float(request["clearance_m"])))
+
+
+@app.query("execute")
+def execute_query(message: Message, context: Context) -> Message:
+    request = _request(message)
     robot_id = int(request["robot_id"])
-    pose = (int(request["x"]), int(request["y"]))
-    target = (int(request["target_x"]), int(request["target_y"]))
-    assignment = Assignment(robot_id, None if target == (-1, -1) else target)
-    map_state = Coordinator()
-    map_state.known = decode_cells(str(request["known_cells"]))
-    intent = RobotWorker(robot_id).propose(pose, assignment, map_state)
-    content = RecordDict({"result": ConfigRecord({
-        "robot_id": robot_id,
-        "x": intent.next_cell[0],
-        "y": intent.next_cell[1],
-    })})
-    return Message(content=content, reply_to=message)
+    outcome = execute(BackendClient(), robot_id, request["approved"], int(request["tick"]))
+    return _reply(message, {"robot_id": robot_id, **outcome})
