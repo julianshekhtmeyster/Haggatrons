@@ -91,7 +91,7 @@ export default function TopBar({ state, api, refresh }: Props) {
         ) : (
           <button className="arm" disabled={busy || !master.configured} onClick={() => run("/api/arm")}>Arm</button>
         )}
-        <button className="estop" title="Emergency stop (Esc, ⌘.)" onClick={() => run("/api/estop", { reason: "button" })}>
+        <button className="estop" title="Emergency stop (Esc)" onClick={() => run("/api/estop", { reason: "button" })}>
           STOP
         </button>
       </div>

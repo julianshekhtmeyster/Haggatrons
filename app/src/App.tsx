@@ -50,7 +50,7 @@ export default function App() {
     };
   }, [refresh]);
 
-  // Escape is the keyboard e-stop (the Fleet menu also has Cmd+.).
+  // Escape is the keyboard e-stop.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") api.post("/api/estop", { reason: "keyboard" }).then(refresh);
@@ -63,7 +63,7 @@ export default function App() {
     return (
       <div className="boot">
         <h1>Haggatrons Control</h1>
-        <p>{backend.running ? "Connecting to backend…" : "Starting the Python backend…"}</p>
+        <p>{backend.running ? "Connecting to backend…" : "Backend not reachable."}</p>
         <pre>{backend.log.slice(-12).join("\n")}</pre>
       </div>
     );

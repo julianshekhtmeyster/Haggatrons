@@ -15,11 +15,17 @@ from urllib.parse import parse_qs, urlparse
 
 from haggatrons import protocol as p
 from haggatrons.client import BACKEND_FILE
-from haggatrons.config import write_private
+from haggatrons.config import ROOT, write_private
 from haggatrons.events import EventBus
 from haggatrons.fleet import FleetController, FleetError
 from haggatrons.link import SerialLink, list_serial_ports
 from haggatrons.mission import Mission, MissionError
+
+
+STATIC_DIR = ROOT / "app" / "dist"
+STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
+                ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json"}
+UI_GRACE_S = 3.0  # disarm when no control page has been connected for this long
 
 
 class ApiError(Exception):
@@ -39,7 +45,9 @@ class Backend:
         self.make_sim_link = make_sim_link
         self.mission: Mission | None = None  # set once the server knows its URL
         self.coordinator: dict | None = None
-        self.frames: dict[str, bytes] = {}
+        self.ui_required = False  # set by `serve`; headless missions and tests have no page
+        self.ui_streams = 0
+        self.ui_last_seen = time.monotonic()
 
     # ------------------------------------------------------------ routes
     def route(self, method: str, path: str, body: dict) -> object:
@@ -203,6 +211,22 @@ def make_handler(backend: Backend):
             supplied = supplied or (query.get("token") or [""])[0]
             return hmac.compare_digest(supplied.encode(), backend.token.encode())
 
+        def _static(self, path: str) -> None:
+            # The control page itself is public; everything under /api needs the token.
+            relative = "index.html" if path in ("", "/") else path.lstrip("/")
+            target = (STATIC_DIR / relative).resolve()
+            if not target.is_relative_to(STATIC_DIR.resolve()) or not target.is_file():
+                if not (STATIC_DIR / "index.html").exists():
+                    return self._send(404, {"error": "UI not built: run `npm install && npm run build` in app/"})
+                target = STATIC_DIR / "index.html"
+            body = target.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", STATIC_TYPES.get(target.suffix, "application/octet-stream"))
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(body)
+
         def _send(self, status: int, payload: object) -> None:
             if isinstance(payload, bytes):
                 body, content_type = payload, "image/jpeg"
@@ -218,6 +242,8 @@ def make_handler(backend: Backend):
         def _handle(self, method: str) -> None:
             url = urlparse(self.path)
             query = parse_qs(url.query)
+            if method == "GET" and not url.path.startswith("/api/"):
+                return self._static(url.path)
             if not self._authorized(query):
                 return self._send(401, {"error": "unauthorized"})
             if method == "GET" and url.path == "/api/events":
@@ -252,6 +278,7 @@ def make_handler(backend: Backend):
             self.send_header("Connection", "keep-alive")
             self.end_headers()
             subscriber = backend.events.subscribe()
+            backend.ui_streams += 1
             try:
                 while True:
                     try:
@@ -264,6 +291,8 @@ def make_handler(backend: Backend):
             except (BrokenPipeError, ConnectionResetError, OSError):
                 pass
             finally:
+                backend.ui_streams -= 1
+                backend.ui_last_seen = time.monotonic()
                 backend.events.unsubscribe(subscriber)
                 self.close_connection = True
 
@@ -290,7 +319,21 @@ class ApiServer:
     def start(self) -> None:
         self._thread = threading.Thread(target=self.httpd.serve_forever, name="api", daemon=True)
         self._thread.start()
+        threading.Thread(target=self._ui_watchdog, name="ui-watchdog", daemon=True).start()
         write_private(BACKEND_FILE, json.dumps({"url": self.url, "token": self.backend.token}))
+
+    def _ui_watchdog(self) -> None:
+        """A closed browser tab must not leave robots armed with nobody watching."""
+        backend = self.backend
+        while True:
+            time.sleep(0.5)
+            if backend.ui_streams > 0:
+                backend.ui_last_seen = time.monotonic()
+            elif backend.ui_required and time.monotonic() - backend.ui_last_seen > UI_GRACE_S:
+                if backend.mission and backend.mission.state in ("running", "paused"):
+                    backend.mission.stop("control page closed")
+                if backend.fleet.armed:
+                    backend.fleet.disarm(reason="control page closed")
 
     def close(self) -> None:
         if self.backend.mission:

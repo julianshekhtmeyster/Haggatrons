@@ -11,7 +11,7 @@ ESP-NOW addresses each board by its Wi-Fi station MAC, which is the base MAC rep
 ## How the link works
 
 ```
-Electron app ⇄ IPC ⇄ Python backend ⇄ USB serial ⇄ master ESP32 ~~ESP-NOW (encrypted)~~ robots
+Chrome control page ⇄ HTTP (localhost) ⇄ Python backend ⇄ USB serial ⇄ master ESP32 ~~ESP-NOW (encrypted)~~ robots
                         │
                         └─ Flower ServerApp + one ClientApp per robot (via the local API)
 ```

@@ -13,7 +13,7 @@ Updated 2026-09-29 (ESP-NOW control center branch). This is the handoff document
 
 ## Verified repository state
 
-Branch `feature/espnow-control-center` replaces the Wi-Fi/HTTP prototype with an ESP-NOW fleet. A master ESP32 plugged into the Mac relays to the robots, and an Electron control centre supervises. See [README.md](README.md), [ESP_NOW.md](ESP_NOW.md) and [PINOUT.md](PINOUT.md).
+Branch `feature/espnow-control-center` replaces the Wi-Fi/HTTP prototype with an ESP-NOW fleet. A master ESP32 plugged into the Mac relays to the robots, and a control page in Chrome, served by the Python backend, supervises. See [README.md](README.md), [ESP_NOW.md](ESP_NOW.md) and [PINOUT.md](PINOUT.md).
 
 | Area | Verified | Not yet verified |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Branch `feature/espnow-control-center` replaces the Wi-Fi/HTTP prototype with an
 | Protocol | The C header and the Python mirror are checked against each other by compiling the header in tests (struct sizes, constants, COBS, CRC). | — |
 | Backend | 23 tests pass against the simulated master and robots: frame reassembly with dropped chunks, arming, e-stop, host-silence watchdog, clearance stop, pause, full local mission. | Not run against real hardware. |
 | Flower | ServerApp/ClientApp rewritten: one worker per robot; observe → assign → decide → gate → execute. | Not executed yet: `flwr[simulation]` could not be installed on the build network. Run `python -m haggatrons mission --sim` once dependencies are installed. |
-| Control centre | Electron + React UI typechecks and builds. Smoke mode: `HAGGATRONS_SMOKE=out.png npm start`. | Not launched yet (the Electron binary download did not finish). |
+| Control page | React page typechecks, builds, and is served by `python -m haggatrons serve` (checked: page, assets, token-protected API, disarm when no page is open). | Not yet visually checked in a browser. |
 | Motors | Firmware drives the TB6612 per PINOUT.md, with STBY low at boot, capped speed and duration, a heartbeat watchdog, a range-guarded forward move, and IMU-measured turns. | Wiring must be changed to PINOUT.md. Motor polarity, yaw sign and speed calibration still need the wheels-off-the-floor checks. |
 | Localization | Dead reckoning from gyro yaw and commanded speed × time, with a growing uncertainty. The shared map uses range-sensor rays plus weak vision evidence. | No wheel encoders; pose drifts. Robots must start at the poses in `config/fleet.json`. |
 
@@ -32,7 +32,7 @@ Removed: `firmware/wifi_robot`, `provision_robot.py`, `wireless_capture.py`, `ru
 - `haggatrons/protocol.py`: wire protocol mirror. `link.py`: USB serial link. `simlink.py`: simulated master and robots.
 - `haggatrons/fleet.py`: arming, e-stop, keepalives, captures, moves, pose estimates. `mission.py`: mission lifecycle and the Flower subprocess. `server.py`: local token-protected API and event stream.
 - `haggatrons/worldmap.py`: shared map, distinct goals, proposals, coordinator gate. `loop.py`: the per-tick worker and coordinator steps used by Flower.
-- `flower_explore/`: the Flower ServerApp and ClientApp. `app/`: the Electron control centre.
+- `flower_explore/`: the Flower ServerApp and ClientApp. `app/`: the control page (served from `app/dist`).
 - `firmware/`: master, robot, shared protocol library, and the original USB camera bench sketch.
 
 ## Hardware facts and unknowns

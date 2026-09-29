@@ -1,11 +1,11 @@
 # Haggatrons
 
-A human-supervised team of small camera robots that explore a room together. A Flower coordinator assigns each robot a distinct goal. Each robot's worker turns its goal into a short, bounded move. The robots' own firmware refuses anything unsafe. The operator watches everything in an Electron control centre and can stop the fleet at any time.
+A human-supervised team of small camera robots that explore a room together. A Flower coordinator assigns each robot a distinct goal. Each robot's worker turns its goal into a short, bounded move. The robots' own firmware refuses anything unsafe. The operator supervises everything from a control page in Chrome and can stop the fleet at any time.
 
 Start with [PRODUCT.md](PRODUCT.md) for the intent and [CONTEXT.md](CONTEXT.md) for what has been verified.
 
 ```
-Electron app ⇄ Python backend ⇄ USB ⇄ master ESP32 ~~encrypted ESP-NOW~~ robot 1, robot 2 (…4)
+Chrome ⇄ Python backend ⇄ USB serial ⇄ master ESP32 ~~encrypted ESP-NOW~~ robot 1, robot 2 (…4)
                    │
                    └─ Flower: ServerApp (coordinator) + one ClientApp worker per robot
 ```
@@ -16,7 +16,7 @@ No router or Wi-Fi network is needed. The robots talk only to the master, which 
 
 | Path | What it is |
 | --- | --- |
-| `app/` | Electron + React control centre (starts the backend for you) |
+| `app/` | React control page (built copy in `app/dist`, served by the backend) |
 | `haggatrons/` | Backend: fleet link, safety state, missions, shared map, local API, simulator |
 | `flower_explore/` | Flower ServerApp (coordinator) and ClientApp (robot worker) |
 | `firmware/master/` | Master ESP32: USB ⇄ ESP-NOW relay, heartbeats, host watchdog |
@@ -32,19 +32,22 @@ No router or Wi-Fi network is needed. The robots talk only to the master, which 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-cd app && npm install
 ```
+
+The built control page is committed in `app/dist`, so npm is only needed to change the UI (`cd app && npm install && npm run build`, or `npm run dev` for hot reload against a running backend).
 
 ## Run the control centre
 
 ```sh
-cd app && npm start        # builds the UI, launches Electron, which starts the backend
+.venv/bin/python -m haggatrons serve        # opens Chrome at http://127.0.0.1:8765
 ```
+
+The backend owns the USB serial link to the master and serves the page. The link Chrome opens carries a one-time access token. Closing the page disarms the fleet after 3 s, so robots are never left armed unwatched.
 
 Click **Use simulator** to try everything without hardware, or pick the master's port and click **Connect master**. Then:
 
 1. **Arm**, then **Start mission** (runner: Flower). Robots move only while the fleet is armed and the mission is running.
-2. **STOP** (or Esc, or ⌘.) e-stops every robot immediately. **Pause** halts motion and holds the mission.
+2. **STOP** (or Esc) e-stops every robot immediately. **Pause** halts motion and holds the mission.
 3. The timeline records every observation, assignment and the reason for it, gate decision, and move outcome. Each mission also writes `runs/missions/<id>/events.jsonl`.
 
 Simulated frames and moves are labelled SIM everywhere.

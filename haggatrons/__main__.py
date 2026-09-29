@@ -1,6 +1,6 @@
 """Command line: python -m haggatrons <command>.
 
-serve       run the control backend (the Electron app starts this for you)
+serve       run the backend and open the control page in Chrome
 mission     headless mission against the simulator or hardware, prints a summary
 ports       list serial ports
 provision   record the master's MAC, or write ESP-NOW settings to a robot over USB
@@ -41,23 +41,39 @@ def build_backend(port: int = 0, token: str | None = None, sim_drop: float = 0.0
     return ApiServer(backend, port=port)
 
 
+def open_chrome(url: str) -> None:
+    import webbrowser
+
+    if sys.platform == "darwin" and subprocess.run(["open", "-a", "Google Chrome", url]).returncode == 0:
+        return
+    for name in ("google-chrome", "chrome", "chromium"):
+        try:
+            webbrowser.get(name).open(url)
+            return
+        except webbrowser.Error:
+            continue
+    webbrowser.open(url)
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     token = os.environ.get("HAGGATRONS_TOKEN") or secrets.token_urlsafe(24)
     server = build_backend(args.port, token)
+    server.backend.ui_required = not args.no_ui_watchdog
     server.start()
     if args.sim:
         server.backend.fleet.connect(server.backend.make_sim_link())
     elif args.serial:
         server.backend.fleet.connect(SerialLink(args.serial))
+    page = f"{server.url}/#token={token}"
     print("HAGGATRONS_READY " + json.dumps({"url": server.url}), flush=True)
-    if not os.environ.get("HAGGATRONS_TOKEN"):
-        print(f"Token (set HAGGATRONS_TOKEN to choose your own): {token}", flush=True)
+    print(f"Control page: {page}", flush=True)
+    if not (ROOT / "app" / "dist" / "index.html").exists():
+        print("UI not built yet: cd app && npm install && npm run build", flush=True)
+    if not args.no_browser:
+        open_chrome(page)
     done = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: done.set())
-    # Exit when the parent (Electron) closes our stdin, so robots are never left armed.
-    if args.parent_stdin:
-        threading.Thread(target=lambda: (sys.stdin.read(), done.set()), daemon=True).start()
     done.wait()
     server.close()
 
@@ -225,11 +241,13 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve = sub.add_parser("serve", help="run the control backend")
-    serve.add_argument("--port", type=int, default=0, help="API port (default: any free port)")
+    serve.add_argument("--port", type=int, default=8765, help="port for the control page and API")
+    serve.add_argument("--no-browser", action="store_true", help="do not open Chrome")
+    serve.add_argument("--no-ui-watchdog", action="store_true",
+                       help="stay armed even when no control page is open (not recommended)")
     link = serve.add_mutually_exclusive_group()
     link.add_argument("--sim", action="store_true", help="connect the simulated master at startup")
     link.add_argument("--serial", help="connect the master on this serial port at startup")
-    serve.add_argument("--parent-stdin", action="store_true", help="exit when stdin closes")
     serve.set_defaults(func=cmd_serve)
 
     mission = sub.add_parser("mission", help="run one headless mission and print a summary")

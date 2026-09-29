@@ -2,12 +2,10 @@
   "name": "haggatrons-control",
   "private": true,
   "version": "0.2.0",
-  "description": "Haggatrons control center: supervise the ESP-NOW robot fleet and Flower missions",
-  "main": "main.cjs",
+  "description": "Haggatrons control center (runs in Chrome, served by the Python backend)",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "start": "vite build && electron .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -18,7 +16,6 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "electron": "^44.5.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.1"
   }
