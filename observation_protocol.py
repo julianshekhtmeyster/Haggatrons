@@ -55,9 +55,16 @@ def read_observation(port, timeout: float = 15.0) -> Observation:
         byte = port.read(1)
         if byte:
             prefix.extend(byte)
+            if b"Factory Test" in prefix:
+                raise RuntimeError(
+                    "W11 factory test firmware detected; flash firmware/usb_camera/usb_camera.ino "
+                    "before using OBS1 capture"
+                )
             if len(prefix) > 128:
-                del prefix[:-8]
+                del prefix[:-128]
             if prefix.endswith(MAGIC):
+                if prefix.endswith(b"READY CAM1 OBS1"):
+                    continue
                 break
     else:
         raise TimeoutError("No OBS1 response from board; close the preview and check firmware")

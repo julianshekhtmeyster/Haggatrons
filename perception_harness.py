@@ -74,6 +74,12 @@ def main() -> None:
         raise SystemExit(f"Cannot open {args.port}; close the W11 USB Camera window. {exc}") from exc
     try:
         time.sleep(1)
+        startup = port.read_all()
+        if b"Factory Test" in startup:
+            raise SystemExit(
+                "W11 factory test firmware detected; flash firmware/usb_camera/usb_camera.ino "
+                "before using OBS1 capture"
+            )
         port.reset_input_buffer()
         port.write(b"R" + RESOLUTIONS[args.resolution])
         time.sleep(0.2)
