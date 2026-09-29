@@ -535,8 +535,12 @@ static void loadConfig() {
 }
 
 static void startEspNow() {
+  // ESP-NOW only: never join or scan for a stored Wi-Fi network. A scan hops
+  // channels and silently breaks ESP-NOW (older firmware saved credentials).
+  WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false, true);  // erase any stored access point
   esp_wifi_set_ps(WIFI_PS_NONE);
   if (!config.provisioned) return;
   esp_wifi_set_channel(config.channel, WIFI_SECOND_CHAN_NONE);
@@ -569,8 +573,11 @@ static void printStatus() {
   printMac(mac);
   Serial.printf(" provisioned=%d id=%u master=", config.provisioned, config.robotId);
   printMac(config.masterMac);
-  Serial.printf(" ch=%u espnow=%d camera=%d imu=%d range=%d link=%d armed=%d psram=%d cam_err=0x%x\n",
-                config.channel, espNowReady, cameraReady, imuReady, rangeReady, linkOk(), armed(), psramFound(),
+  uint8_t radioChannel = 0;
+  wifi_second_chan_t secondChannel;
+  esp_wifi_get_channel(&radioChannel, &secondChannel);
+  Serial.printf(" ch=%u radio_ch=%u espnow=%d camera=%d imu=%d range=%d link=%d armed=%d psram=%d cam_err=0x%x\n",
+                config.channel, radioChannel, espNowReady, cameraReady, imuReady, rangeReady, linkOk(), armed(), psramFound(),
                 cameraError);
 }
 

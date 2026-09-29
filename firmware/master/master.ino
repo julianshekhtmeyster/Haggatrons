@@ -111,7 +111,8 @@ static void sendStatus() {
   HgSerStatus status = {};
   status.uptime_ms = millis();
   status.flags = broadcastFlags();
-  status.channel = radioChannel;
+  wifi_second_chan_t secondChannel;
+  if (esp_wifi_get_channel(&status.channel, &secondChannel) != ESP_OK) status.channel = 0;  // actual radio channel
   status.count = peerCount;
   memcpy(buffer, &status, sizeof(status));
   const uint32_t now = millis();
@@ -299,8 +300,11 @@ void setup() {
   Serial.begin(921600);
   rxQueue = xQueueCreate(RX_QUEUE_DEPTH, sizeof(RxItem));
 
+  // ESP-NOW only: never join or scan for a stored Wi-Fi network (a scan hops channels).
+  WiFi.persistent(false);
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false, true);  // erase any stored access point
   esp_wifi_set_ps(WIFI_PS_NONE);
   esp_wifi_set_channel(radioChannel, WIFI_SECOND_CHAN_NONE);
   if (esp_now_init() != ESP_OK) {
