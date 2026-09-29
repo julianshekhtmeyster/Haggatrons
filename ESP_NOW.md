@@ -2,12 +2,12 @@
 
 ESP-NOW addresses each board by its Wi-Fi station MAC, which is the base MAC reported by `esptool read_mac`. The canonical list is `config/fleet.json`. `python -m haggatrons provision master` writes the master's MAC there.
 
-| Board | Chip | MAC (station) | Read on |
+| Board | Chip | MAC (station) | Notes |
 | --- | --- | --- | --- |
-| Master | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:de:b0` | 2026-09-29, `/dev/cu.usbmodem101` |
-| Slave 1 (robot 1) | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:e1:dc` | 2026-09-29, `/dev/cu.usbmodem101` |
-| Slave 2 (robot 2) | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:e3:94` | 2026-09-29, `/dev/cu.usbmodem101` (replacement board) |
-| Retired (old Slave 2) | ESP32-S3, camera sends no image data | `44:bd:8d:eb:de:00` | Not in the fleet; its old key was rotated |
+| Master | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:e3:94` | Flashed and provisioned 2026-09-29 |
+| Robot 1 | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:de:b0` | Camera (OV3660) and IMU verified 2026-09-29 |
+| Robot 2 | ESP32-S3 (QFN56) rev v0.2, 8 MB PSRAM | `44:bd:8d:eb:e1:dc` | Camera (OV3660) and IMU verified 2026-09-29 |
+| Spare | ESP32-S3 | `44:bd:8d:eb:de:00` | Not in the fleet: camera detected but never delivers image data |
 
 ## How the link works
 
