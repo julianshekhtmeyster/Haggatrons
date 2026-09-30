@@ -125,6 +125,12 @@ static uint32_t rangeMs = 0;
 static bool rangeValid = false;
 static float accel[3] = {}, gyro[3] = {};
 static bool imuValid = false;
+// Learned while idle: gravity direction ("up") and the gyro's resting offset.
+// Turns are measured about "up", so any board mounting works (the W11 usually
+// stands upright so its camera faces forward).
+static float upVector[3] = {0, 0, 1};
+static float gyroBias[3] = {};
+static bool upKnown = false;
 
 static uint8_t *frameBuffer = nullptr;
 static uint32_t frameLength = 0;
@@ -191,7 +197,27 @@ static void readImu() {
              imu.getGyroscope(gyro[0], gyro[1], gyro[2]);
 }
 
+static void learnAtRest() {
+  if (!imuValid || move.running) return;
+  const float norm = sqrtf(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
+  const float rate = fabsf(gyro[0]) + fabsf(gyro[1]) + fabsf(gyro[2]);
+  if (norm < 0.8f || norm > 1.2f || rate > 30.0f) return;  // being carried or bumped
+  const float blend = upKnown ? 0.1f : 1.0f;
+  for (int i = 0; i < 3; ++i) {
+    upVector[i] += blend * (accel[i] / norm - upVector[i]);
+    gyroBias[i] += (upKnown ? 0.05f : 1.0f) * (gyro[i] - gyroBias[i]);
+  }
+  upKnown = true;
+}
+
+// Rotation rate about vertical, counter-clockwise (seen from above) positive.
 static float yawRate() {
+  if (upKnown) {
+    const float norm = sqrtf(upVector[0] * upVector[0] + upVector[1] * upVector[1] + upVector[2] * upVector[2]);
+    float rate = 0;
+    for (int i = 0; i < 3; ++i) rate += (gyro[i] - gyroBias[i]) * upVector[i] / norm;
+    return rate * (config.yawSign < 0 ? -1.0f : 1.0f);
+  }
   return gyro[config.yawAxis > 2 ? 2 : config.yawAxis] * (config.yawSign < 0 ? -1.0f : 1.0f);
 }
 
@@ -576,6 +602,7 @@ static void printStatus() {
   uint8_t radioChannel = 0;
   wifi_second_chan_t secondChannel;
   esp_wifi_get_channel(&radioChannel, &secondChannel);
+  Serial.printf(" up=%.2f,%.2f,%.2f", upVector[0], upVector[1], upVector[2]);
   Serial.printf(" ch=%u radio_ch=%u espnow=%d camera=%d imu=%d range=%d link=%d armed=%d psram=%d cam_err=0x%x\n",
                 config.channel, radioChannel, espNowReady, cameraReady, imuReady, rangeReady, linkOk(), armed(), psramFound(),
                 cameraError);
@@ -737,6 +764,11 @@ void setup() {
   ledcAttachChannel(PIN_PWMB, PWM_FREQ, PWM_BITS, 1);
   motorsOff();
   initSensors();
+  for (int i = 0; i < 20 && imuReady; ++i) {  // seed "up" and gyro offset before any move
+    readImu();
+    learnAtRest();
+    delay(10);
+  }
   startEspNow();
   Serial.println(cameraReady ? "READY CAM1 OBS1 HGBOT" : "ERR camera init");
 }
@@ -754,7 +786,10 @@ void loop() {
   static uint32_t lastTelemetryMs = 0;
   if (millis() - lastTelemetryMs >= HG_TELEMETRY_PERIOD_MS) {
     lastTelemetryMs = millis();
-    if (!move.running) readImu();
+    if (!move.running) {
+      readImu();
+      learnAtRest();
+    }
     if (config.provisioned) sendTelemetry();
   }
   if (Serial.available() > 0) benchCommand(Serial.read());

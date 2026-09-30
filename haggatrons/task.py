@@ -167,7 +167,7 @@ class ScanTask:
                     if self.state != "running":
                         turn_outcome = "stopped"
                     else:
-                        timeout = int(min(p.MAX_MOVE_MS, 600 + angle / 90 * 1200))
+                        timeout = int(min(p.MAX_MOVE_MS, 800 + angle / 90 * 2000))
                         try:
                             result = self.fleet.move(
                                 robot_id, p.MoveCommand(p.MOVE_TURN, cal.turn_speed, cal.turn_speed, timeout, angle),

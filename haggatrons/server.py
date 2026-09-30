@@ -242,7 +242,7 @@ class Backend:
         cal = self.fleet.fleet.calibration
         if proposal.get("action") == "turn":
             degrees = max(-180.0, min(180.0, float(proposal["turn_deg"])))
-            timeout = int(min(p.MAX_MOVE_MS, 600 + abs(degrees) / 90 * 1200))
+            timeout = int(min(p.MAX_MOVE_MS, 800 + abs(degrees) / 90 * 2000))
             return p.MoveCommand(p.MOVE_TURN, cal.turn_speed, cal.turn_speed, timeout, degrees)
         if proposal.get("action") == "forward":
             mps = cal.forward_mps_at_full_speed * cal.cruise_speed / 1000
