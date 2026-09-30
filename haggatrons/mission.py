@@ -43,6 +43,7 @@ class Mission:
         self.vision_budget = 0
         self.vision_used = 0
         self.runner = "flower"
+        self.robot_ids: list[int] = []  # the robots online when the mission started
         self.started_at: float | None = None
         self.summary: dict | None = None
         self.coordinator: dict | None = None
@@ -80,6 +81,10 @@ class Mission:
                 raise MissionError("Arm the fleet (and clear any e-stop) before starting")
             if vision and not 0 < vision_budget <= 50:
                 raise MissionError("vision budget must be 1-50 calls")
+            robot_ids = sorted(r.id for r in self.fleet.robots.values() if r.online())
+            if not robot_ids:
+                raise MissionError("No robot is online")
+            self.robot_ids = robot_ids
             self.id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
             self.log_dir = RUNS / "missions" / self.id
             self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -90,10 +95,12 @@ class Mission:
         (self.log_dir / "mission.json").write_text(json.dumps({
             "id": self.id, "steps": steps, "vision": vision, "vision_budget": vision_budget,
             "runner": runner, "simulated": self.fleet.simulated,
-            "robots": [r.id for r in self.fleet.fleet.robots], "started_utc": self.id,
+            "robots": self.robot_ids, "started_utc": self.id,
         }, indent=2) + "\n")
+        skipped = sorted(set(self.fleet.robots) - set(self.robot_ids))
         self.events.publish("mission", state="running", mission_id=self.id, steps=steps, vision=vision,
-                            runner=runner, simulated=self.fleet.simulated)
+                            runner=runner, simulated=self.fleet.simulated, robots=self.robot_ids,
+                            skipped_offline=skipped)
         target = self._run_flower if runner == "flower" else self._run_local
         self._thread = threading.Thread(target=target, name="mission", daemon=True)
         self._thread.start()
@@ -152,7 +159,7 @@ class Mission:
 
         try:
             api = BackendClient(self.url, self.token)
-            self.summary = headless_mission(api, list(self.fleet.robots), self.steps,
+            self.summary = headless_mission(api, self.robot_ids, self.steps,
                                             self.fleet.fleet.calibration.min_clear_mm / 1000, self.vision)
         except Exception as exc:
             return self._finish("failed", error=str(exc))
@@ -169,7 +176,7 @@ class Mission:
             "PYTHONIOENCODING": "utf-8", "PYTHONPATH": str(ROOT),
             "PATH": str(Path(executable).parent) + os.pathsep + env.get("PATH", ""),
         })
-        robots = len(self.fleet.robots)
+        robots = len(self.robot_ids)
         command = [executable, "run", ".", "--stream",
                    "--federation-config", f"num-supernodes={robots} client-resources-num-cpus=1",
                    "--run-config", f"steps={self.steps} vision={'true' if self.vision else 'false'} "
@@ -202,10 +209,11 @@ class Mission:
 
     # ------------------------------------------------------------ views
     def control(self) -> dict:
-        return {"state": self.state, "mission_id": self.id}
+        return {"state": self.state, "mission_id": self.id, "robot_ids": self.robot_ids}
 
     def snapshot(self) -> dict:
         return {"state": self.state, "id": self.id, "steps": self.steps, "runner": self.runner,
+                "robot_ids": self.robot_ids,
                 "vision": self.vision, "vision_budget": self.vision_budget, "vision_used": self.vision_used,
                 "started_at": self.started_at, "summary": self.summary,
                 "log_dir": str(self.log_dir) if self.log_dir else None}

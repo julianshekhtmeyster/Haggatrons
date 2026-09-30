@@ -54,7 +54,8 @@ def main(grid: Grid, context: Context) -> None:
     steps = int(context.run_config.get("steps", 8))
     vision = str(context.run_config.get("vision", "false")).lower() == "true"
     clearance = int(context.run_config.get("clearance-mm", 180)) / 1000
-    robot_ids = sorted(robot["id"] for robot in api.get("/api/state")["fleet"]["robots"])
+    # Only the robots that were online when the operator started the mission take part.
+    robot_ids = sorted(api.get("/api/mission/control")["robot_ids"])
     nodes = sorted(grid.get_node_ids())
     if len(nodes) != len(robot_ids):
         raise RuntimeError(f"Expected one Flower SuperNode per robot ({len(robot_ids)}), got {len(nodes)}")

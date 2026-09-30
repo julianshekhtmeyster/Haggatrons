@@ -189,3 +189,19 @@ def test_telemetry_does_not_evict_event_history():
     for _ in range(100):
         bus.publish("telemetry", robot_id=1)
     assert [e["kind"] for e in bus.recent()] == ["link"]
+
+
+def test_mission_runs_with_only_the_online_robots(stack):
+    api, controller, backend, make_link, _ = stack
+    link = make_link()
+    link.robots.pop(2)  # robot 2 is powered off
+    controller.connect(link)
+    assert wait_for(lambda: controller.robots[1].online())
+    assert not controller.robots[2].online()
+    controller.arm()
+    started = api.post("/api/mission/start", {"steps": 2, "runner": "local"})
+    assert started["robot_ids"] == [1]
+    assert wait_for(lambda: backend.mission.state in ("finished", "failed"), timeout=60)
+    assert backend.mission.state == "finished", backend.events.recent(20)
+    observed = {e["robot_id"] for e in backend.events.recent(400) if e["kind"] == "observation"}
+    assert observed == {1}

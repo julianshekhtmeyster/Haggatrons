@@ -85,6 +85,7 @@ export interface MissionState {
   id: string | null;
   steps: number;
   runner: string;
+  robot_ids: number[];
   vision: boolean;
   vision_budget: number;
   vision_used: number;

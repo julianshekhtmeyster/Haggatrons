@@ -30,9 +30,11 @@ export default function MissionPanel({ state, api, refresh }: Props) {
       ? "Connect the master or simulator"
       : !fleet.armed
         ? "Arm the fleet to start"
-        : fleet.robots.some((r) => !r.online)
-          ? `Waiting for ${fleet.robots.filter((r) => !r.online).map((r) => r.name).join(", ")}`
+        : fleet.robots.every((r) => !r.online)
+          ? "No robot is online"
           : null;
+  const onlineRobots = fleet.robots.filter((r) => r.online);
+  const offlineRobots = fleet.robots.filter((r) => !r.online);
 
   return (
     <div className="mission">
@@ -76,6 +78,11 @@ export default function MissionPanel({ state, api, refresh }: Props) {
             Start mission
           </button>
           {readyReason && <p className="muted small">{readyReason}.</p>}
+          {!readyReason && offlineRobots.length > 0 && (
+            <p className="small warn">
+              Runs with {onlineRobots.map((r) => r.name).join(", ")} only; {offlineRobots.map((r) => r.name).join(", ")} offline.
+            </p>
+          )}
           {mission.summary && (
             <p className="muted small">
               Last mission {mission.state}: {mission.summary.ticks} ticks, {mission.summary.area_m2} m² confirmed free.

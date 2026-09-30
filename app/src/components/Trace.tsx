@@ -67,6 +67,7 @@ export default function Trace({ events, robots }: Props) {
     <div className="trace">
       <div className="trace-meta muted">
         Mission {start.mission_id} · {start.runner === "flower" ? "Flower federation" : "local loop (Flower logic)"}{start.simulated ? " · SIMULATED" : " · hardware"} · vision {start.vision ? "on" : "off"}
+        {start.skipped_offline?.length > 0 && ` · skipped offline: robot ${start.skipped_offline.join(", ")}`}
         {end && ` · ${end.state}${end.error ? `: ${end.error}` : ""}`}
       </div>
       {ticks.length === 0 && <p className="muted">Waiting for the first tick…</p>}
@@ -81,7 +82,7 @@ export default function Trace({ events, robots }: Props) {
               {assigned?.coverage && <span className="muted">shared map: {assigned.coverage.area_m2} m² free, {assigned.coverage.blocked_cells} obstacle cells</span>}
             </header>
             <div className="tick-robots">
-              {robots.map((robot, index) => {
+              {robots.filter((robot) => !start.robots || start.robots.includes(robot.id)).map((robot, index) => {
                 const mine = (kind: string) => at.filter((e) => e.kind === kind && e.robot_id === robot.id);
                 const obs = mine("observation")[0];
                 const vision = mine("vision")[0];
