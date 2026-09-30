@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Api } from "../api";
-import type { FleetState, Robot } from "../types";
+import type { FleetEvent, FleetState, Robot } from "../types";
+import { VisionBlock } from "./Trace";
 
 interface Props {
   robot: Robot;
@@ -8,12 +9,13 @@ interface Props {
   missionActive: boolean;
   api: Api;
   refresh: () => void;
+  vision?: FleetEvent;
 }
 
 const JOG_TURN_DEG = 30;
 const JOG_FORWARD_MS = 400;
 
-export default function RobotCard({ robot, fleet, missionActive, api, refresh }: Props) {
+export default function RobotCard({ robot, fleet, missionActive, api, refresh, vision }: Props) {
   const [image, setImage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const t = robot.telemetry;
@@ -69,11 +71,20 @@ export default function RobotCard({ robot, fleet, missionActive, api, refresh }:
         <div><dt>Last</dt><dd>{robot.last_move ? robot.last_move.outcome.replaceAll("_", " ") : "—"}</dd></div>
       </dl>
 
+      {vision && <VisionBlock event={vision as never} />}
+
       <div className="controls">
-        <button disabled={!robot.online || missionActive || !!busy}
-          onClick={() => act("capture", `/api/robots/${robot.id}/capture`, { framesize: "640x480" })}>
-          {busy === "capture" ? "Capturing…" : "Capture"}
-        </button>
+        <div className="row-buttons">
+          <button disabled={!robot.online || missionActive || !!busy}
+            onClick={() => act("capture", `/api/robots/${robot.id}/capture`, { framesize: "640x480" })}>
+            {busy === "capture" ? "Capturing…" : "Capture"}
+          </button>
+          <button className="ai-button" title="Capture a frame and run it through gpt-6-luna (one paid call). Never moves the robot."
+            disabled={!robot.online || missionActive || !!busy}
+            onClick={() => act("analyze", `/api/robots/${robot.id}/analyze`, { framesize: "640x480" })}>
+            {busy === "analyze" ? "Analyzing…" : "Analyze"}
+          </button>
+        </div>
         <div className="jog" title={missionActive ? "Manual moves are disabled during a mission" : fleet.armed ? "" : "Arm the fleet to jog"}>
           <button disabled={!canMove} onClick={() => turn(JOG_TURN_DEG)}>⟲</button>
           <button disabled={!canMove || !t?.range_ok} onClick={forward}>▲</button>

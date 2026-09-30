@@ -117,7 +117,7 @@ class Backend:
             if frame is None:
                 raise ApiError(404, "Unknown frame")
             return frame
-        match = re.fullmatch(r"/api/robots/(\d+)/(capture|observe|move|act|stop)", path)
+        match = re.fullmatch(r"/api/robots/(\d+)/(capture|observe|analyze|move|act|stop)", path)
         if method == "POST" and match:
             return self._robot_action(int(match.group(1)), match.group(2), body)
         raise ApiError(404, f"No route for {method} {path}")
@@ -157,6 +157,8 @@ class Backend:
         if action == "stop":
             fleet.stop_robot(robot_id)
             return {"ok": True}
+        if action == "analyze":
+            return self._analyze(robot_id, body)
         if action in ("capture", "observe"):
             if action == "capture" and self.mission.state in ("running", "paused"):
                 raise ApiError(409, "Manual captures are disabled while a mission is active")
@@ -181,8 +183,34 @@ class Backend:
             return fleet.move(robot_id, command, source="manual", reason=str(body.get("reason", "operator jog")))
         # act: a coordinator-approved proposal from a mission worker
         command = self._proposal_to_command(body)
-        outcome = fleet.move(robot_id, command, source="mission", reason=str(body.get("reason", "")))
+        outcome = fleet.move(robot_id, command, source="mission", reason=str(body.get("reason", "")),
+                             tick=body.get("tick"))
         return {"robot_id": robot_id, "tick": body.get("tick"), "proposal": body, **outcome}
+
+    def _analyze(self, robot_id: int, body: dict) -> dict:
+        """Operator-requested look: one fresh frame through the visual model. Never moves."""
+        from haggatrons.loop import VISION_GOAL
+        from haggatrons.observer import MODEL, load_api_key, observe_jpeg
+
+        if self.mission.state in ("running", "paused"):
+            raise ApiError(409, "The mission is using the cameras; analyze from the trace instead")
+        key = load_api_key()
+        if not key:
+            raise ApiError(409, "No OpenAI key: put OPENAI_API_KEY=... in the project .env, then retry")
+        capture = self.fleet.capture(robot_id, str(body.get("framesize", "640x480")), 12)
+        goal = str(body.get("goal") or VISION_GOAL)[:500]
+        started = time.monotonic()
+        try:
+            decision, usage = observe_jpeg(capture.jpeg, goal, key)
+        except Exception as exc:
+            message = str(exc).replace(key, "[REDACTED]")[:500]
+            self.events.publish("vision_failed", robot_id=robot_id, frame_id=capture.frame_id, message=message,
+                                source="manual")
+            raise ApiError(502, f"Vision model failed: {message}") from None
+        event = self.events.publish("vision", robot_id=robot_id, frame_id=capture.frame_id, model=MODEL,
+                                    decision=decision, usage=usage, goal=goal, source="manual",
+                                    seconds=round(time.monotonic() - started, 2), motor_action_executed=False)
+        return event
 
     def _proposal_to_command(self, proposal: dict) -> p.MoveCommand:
         cal = self.fleet.fleet.calibration

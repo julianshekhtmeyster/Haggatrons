@@ -6,6 +6,7 @@ import RobotCard from "./components/RobotCard";
 import MapView from "./components/MapView";
 import MissionPanel from "./components/MissionPanel";
 import EventLog from "./components/EventLog";
+import Trace from "./components/Trace";
 
 const MAX_EVENTS = 600;
 
@@ -15,6 +16,7 @@ export default function App() {
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
   const [backend, setBackend] = useState<{ running: boolean; log: string[] }>({ running: false, log: [] });
   const toastId = useRef(0);
+  const [view, setView] = useState<"map" | "trace">("map");
 
   const notify = useCallback((text: string) => {
     const id = ++toastId.current;
@@ -38,7 +40,8 @@ export default function App() {
     const offEvent = window.haggatrons.onEvent((event) => {
       if (event.kind === "telemetry") return; // polled state carries telemetry
       setEvents((current) => (current.some((e) => e.id === event.id) ? current : [...current.slice(-MAX_EVENTS), event]));
-      if (["safety", "mission", "link", "coordinator", "move_result", "capture"].includes(event.kind)) refresh();
+      if (["safety", "mission", "link", "coordinator", "move_result", "capture", "vision"].includes(event.kind)) refresh();
+      if (event.kind === "mission" && event.state === "running" && !event.resumed) setView("trace");
     });
     const timer = setInterval(refresh, 500);
     refresh();
@@ -77,11 +80,16 @@ export default function App() {
         <section className="fleet">
           {state.fleet.robots.map((robot) => (
             <RobotCard key={robot.id} robot={robot} fleet={state.fleet} missionActive={missionActive}
-              api={api} refresh={refresh} />
+              api={api} refresh={refresh}
+              vision={[...events].reverse().find((e) => e.kind === "vision" && e.robot_id === robot.id)} />
           ))}
         </section>
         <section className="center">
-          <MapView fleet={state.fleet} coordinator={state.coordinator} />
+          <div className="tabs">
+            <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>Shared map</button>
+            <button className={view === "trace" ? "active" : ""} onClick={() => setView("trace")}>AI trace</button>
+          </div>
+          {view === "map" ? <MapView fleet={state.fleet} coordinator={state.coordinator} /> : <Trace events={events} robots={state.fleet.robots} />}
         </section>
         <section className="side">
           <MissionPanel state={state} api={api} refresh={refresh} />

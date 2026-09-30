@@ -56,6 +56,7 @@ def observe(api: BackendClient, robot_id: int, tick: int, use_vision: bool) -> d
                           summary=decision["scene_summary"],
                           confidence=0.3 if decision["uncertainty"] else 0.5)
             api.post("/api/log", {"kind": "vision", "robot_id": robot_id, "tick": tick, "model": MODEL,
+                                  "source": "mission", "goal": VISION_GOAL,
                                   "decision": decision, "usage": usage, "frame_id": obs["frame_id"],
                                   "seconds": round(time.monotonic() - started, 2),
                                   "motor_action_executed": False})
@@ -63,6 +64,7 @@ def observe(api: BackendClient, robot_id: int, tick: int, use_vision: bool) -> d
 
 
 def decide(report: dict, goal: dict, clearance_m: float) -> dict:
+    """Pure function of the report and goal, so it runs on the worker without robot I/O."""
     target = goal.get("target")
     proposal = propose(_report(report), Goal(goal["robot_id"], goal["kind"],
                                              tuple(target) if target else None, goal["reason"]),
@@ -72,6 +74,7 @@ def decide(report: dict, goal: dict, clearance_m: float) -> dict:
 
 def execute(api: BackendClient, robot_id: int, approved: dict, tick: int) -> dict:
     if approved["action"] == "hold":
+        api.post("/api/log", {"kind": "held", "robot_id": robot_id, "tick": tick, "reason": approved["reason"]})
         return {"robot_id": robot_id, "outcome": "held", "reason": approved["reason"]}
     try:
         return api.post(f"/api/robots/{robot_id}/act", {**approved, "tick": tick}, timeout=10)

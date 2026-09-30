@@ -406,7 +406,7 @@ class FleetController:
         return capture
 
     def move(self, robot_id: int, command: p.MoveCommand, source: str = "manual",
-             reason: str = "") -> dict:
+             reason: str = "", tick: int | None = None) -> dict:
         robot = self._robot(robot_id)
         refusal = self._refuse_move(robot, source)
         cal = self.fleet.calibration
@@ -419,7 +419,7 @@ class FleetController:
         except ValueError as exc:
             refusal = refusal or str(exc)
         if refusal:
-            self.events.publish("move_refused", robot_id=robot_id, source=source,
+            self.events.publish("move_refused", robot_id=robot_id, source=source, tick=tick,
                                 command=command.describe(), reason=refusal)
             raise FleetError(refusal)
 
@@ -428,7 +428,7 @@ class FleetController:
         with self._lock:
             self._moves[req_id] = pending
             robot.moving_req = req_id
-        self.events.publish("move_sent", robot_id=robot_id, req_id=req_id, source=source,
+        self.events.publish("move_sent", robot_id=robot_id, req_id=req_id, source=source, tick=tick,
                             command=command.describe(), reason=reason)
         try:
             self._send_robot(robot_id, p.MSG_MOVE, command.pack(req_id))
@@ -440,7 +440,7 @@ class FleetController:
         except FleetError as exc:
             robot.last_move = {"req_id": req_id, "command": command.describe(), "outcome": "failed",
                                "error": str(exc), "source": source}
-            self.events.publish("move_failed", robot_id=robot_id, req_id=req_id, error=str(exc))
+            self.events.publish("move_failed", robot_id=robot_id, req_id=req_id, tick=tick, error=str(exc))
             raise
         finally:
             with self._lock:
@@ -450,7 +450,7 @@ class FleetController:
         result = pending.result
         before = Pose(**vars(robot.pose))
         self._update_pose(robot, command, result)
-        outcome = {**result.as_dict(), "command": command.describe(), "source": source,
+        outcome = {**result.as_dict(), "command": command.describe(), "source": source, "tick": tick,
                    "pose_before": before.as_dict(), "pose_after": robot.pose.as_dict()}
         robot.last_move = outcome
         self.events.publish("move_result", robot_id=robot_id, **outcome)
