@@ -120,7 +120,7 @@ export interface CoordinatorState {
 export interface TaskState {
   state: "idle" | "running" | "stopping" | "finished" | "stopped";
   id: string | null;
-  plan: { steps_per_rotation: number; rotations: number; target: string; stop_when_found: boolean } | null;
+  plan: { steps_per_rotation: number; rotations: number; target: string } | null;
   instruction: string;
   robots: Record<string, { state: string; step: number; found: unknown }>;
 }

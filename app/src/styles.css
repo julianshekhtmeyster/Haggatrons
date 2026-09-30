@@ -255,3 +255,20 @@ button.estop:hover { background: #da3633 !important; }
 .look-hit { position: absolute; bottom: 4px; left: 4px; right: 4px; background: #238636; color: white; font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; text-align: center; }
 .person-text { color: #ff7b72; font-weight: 600; }
 .pill.finished { color: var(--ok); border-color: var(--ok); }
+
+/* per-robot scan log */
+.robot-log { background: var(--panel-2); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px; margin-top: 10px; }
+.robot-log header { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin-bottom: 8px; }
+.found-summary { font-size: 12px; color: var(--muted); }
+.found-summary.yes { color: var(--ok); font-weight: 600; }
+.robot-log table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.robot-log th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.robot-log td { padding: 5px 6px; border-bottom: 1px solid #1f262f; vertical-align: middle; }
+.robot-log td.thumb { width: 96px; }
+.robot-log td.thumb .frame { width: 88px; }
+.robot-log tr.hit { background: rgba(63, 185, 80, 0.1); }
+.robot-log td.yes { color: var(--ok); font-weight: 700; }
+.robot-log td.no { color: var(--muted); }
+.robot-log tr.pending td { color: var(--accent); }
+.outcome.completed { color: var(--ok); }
+.outcome.stopped { color: var(--warn); }

@@ -5,24 +5,21 @@ import { Frame } from "./Trace";
 import { ROBOT_COLORS } from "./MapView";
 
 // Operator scan task: write an instruction, let the coordinator interpret it into
-// a plan, edit it, and send it to every online robot. Each robot reports every
-// look-and-turn step back here.
+// a plan, edit it, and send it to every online robot. Every robot photographs
+// every position around the circle; each position is one row in its log.
 
 type AnyEvent = FleetEvent & Record<string, any>;
 interface Plan {
   steps_per_rotation: number;
   rotations: number;
   target: string;
-  stop_when_found: boolean;
   understood_as: string;
 }
 
 const OUTCOMES: Record<string, string> = {
   running: "scanning…",
-  found: "✓ found",
-  not_found: "not found",
+  completed: "completed",
   stopped: "stopped",
-  stopped_person: "stopped: person in view",
   failed: "failed",
 };
 
@@ -34,13 +31,13 @@ interface Props {
 }
 
 export default function TaskPanel({ state, events, api, refresh }: Props) {
-  const [instruction, setInstruction] = useState("Turn a full circle in 8 steps and look for a person. Stop when you find one.");
-  const [plan, setPlan] = useState<Plan>({ steps_per_rotation: 8, rotations: 1, target: "person", stop_when_found: true, understood_as: "" });
+  const [instruction, setInstruction] = useState("Do 8 rotations and look for a person.");
+  const [plan, setPlan] = useState<Plan>({ steps_per_rotation: 8, rotations: 1, target: "person", understood_as: "" });
   const [busy, setBusy] = useState<string | null>(null);
   const task = state.task;
   const running = task?.state === "running" || task?.state === "stopping";
   const online = state.fleet.robots.filter((r) => r.online);
-  const steps = plan.steps_per_rotation * plan.rotations;
+  const positions = plan.steps_per_rotation * plan.rotations;
 
   const interpret = async () => {
     setBusy("plan");
@@ -67,21 +64,21 @@ export default function TaskPanel({ state, events, api, refresh }: Props) {
     <div className="task">
       <section className="task-compose">
         <h2>Coordinator instruction</h2>
-        <textarea rows={3} value={instruction} disabled={running} onChange={(e) => setInstruction(e.target.value)}
-          placeholder="e.g. Scan two full circles in 12 steps and look for a dog." />
+        <textarea rows={2} value={instruction} disabled={running} onChange={(e) => setInstruction(e.target.value)}
+          placeholder="e.g. Do 12 rotations and look for a dog." />
         <div className="row">
           <button disabled={running || !!busy || !instruction.trim()} onClick={interpret}>
             {busy === "plan" ? "Interpreting…" : "Interpret with gpt-6-luna"}
           </button>
-          <span className="muted small">or edit the plan directly</span>
+          <span className="muted small">or set the plan directly</span>
         </div>
 
         <div className="plan">
-          <label>Steps per 360°
+          <label>Positions per full turn
             <input type="number" min={2} max={36} value={plan.steps_per_rotation} disabled={running}
               onChange={(e) => setPlan({ ...plan, steps_per_rotation: Number(e.target.value) })} />
           </label>
-          <label>Rotations
+          <label>Full turns
             <input type="number" min={1} max={3} value={plan.rotations} disabled={running}
               onChange={(e) => setPlan({ ...plan, rotations: Number(e.target.value) })} />
           </label>
@@ -89,17 +86,12 @@ export default function TaskPanel({ state, events, api, refresh }: Props) {
             <input type="text" maxLength={100} value={plan.target} disabled={running}
               onChange={(e) => setPlan({ ...plan, target: e.target.value })} />
           </label>
-          <label className="check">
-            <input type="checkbox" checked={plan.stop_when_found} disabled={running}
-              onChange={(e) => setPlan({ ...plan, stop_when_found: e.target.checked })} />
-            Stop when found
-          </label>
         </div>
         {plan.understood_as && <p className="small understood">Understood as: {plan.understood_as}</p>}
         <p className="small muted">
-          {(360 / Math.max(2, plan.steps_per_rotation)).toFixed(0)}° per step · {steps} looks per robot ·
-          up to {steps * Math.max(1, online.length)} paid vision calls for {online.length} online robot{online.length === 1 ? "" : "s"}.
-          A person in view stops that robot unless you are looking for people.
+          Each robot photographs {positions} position{positions === 1 ? "" : "s"}, {(360 / Math.max(2, plan.steps_per_rotation)).toFixed(0)}° apart,
+          and checks every photo for “{plan.target || "…"}”. Up to {positions * Math.max(1, online.length)} paid vision calls
+          for {online.length} online robot{online.length === 1 ? "" : "s"}.
         </p>
         <div className="row">
           {running ? (
@@ -116,48 +108,65 @@ export default function TaskPanel({ state, events, api, refresh }: Props) {
       {start && (
         <section className="task-results">
           <div className="panel-title">
-            <h2>Task {start.task_id}: look for “{start.plan.target}”</h2>
+            <h2>Task {start.task_id} · looking for “{start.plan.target}”</h2>
             <span className={`pill ${end ? end.state : "running"}`}>{end ? end.state : task?.state}</span>
           </div>
-          {start.skipped_offline?.length > 0 && <p className="small warn">Skipped offline: robot {start.skipped_offline.join(", ")}</p>}
-          <div className="task-robots">
-            {state.fleet.robots.filter((r) => start.robots.includes(r.id)).map((robot) => {
-              const index = state.fleet.robots.findIndex((r) => r.id === robot.id);
-              const stepsFor = current.filter((e) => e.kind === "task_step" && e.robot_id === robot.id);
-              const turns = current.filter((e) => e.kind === "move_result" && e.robot_id === robot.id && e.source === "task");
-              const done = [...current].reverse().find((e) => e.kind === "task_robot" && e.robot_id === robot.id);
-              const outcome = done?.outcome ?? "running";
-              return (
-                <article key={robot.id} className={`task-robot ${outcome}`} style={{ borderTopColor: ROBOT_COLORS[index % ROBOT_COLORS.length] }}>
-                  <header>
-                    <b>{robot.name}</b>
-                    <span className={`outcome ${outcome}`}>{OUTCOMES[outcome] ?? outcome}</span>
-                    <span className="muted small">{stepsFor.length}/{start.plan.steps_per_rotation * start.plan.rotations} looks</span>
-                  </header>
-                  {done?.error && <p className="small bad">{done.error}</p>}
-                  {done?.reason && <p className="small warn">{done.reason}</p>}
-                  <div className="looks">
-                    {stepsFor.map((s) => {
-                      const d = s.detection;
-                      const turn = turns.find((t) => t.tick === s.step);
+          {start.skipped_offline?.length > 0 && <p className="small warn">Skipped (offline): robot {start.skipped_offline.join(", ")}</p>}
+          {end?.log_dir && <p className="small muted">Logs: {end.log_dir}/robot-N.csv</p>}
+
+          {state.fleet.robots.filter((r) => start.robots.includes(r.id)).map((robot) => {
+            const index = state.fleet.robots.findIndex((r) => r.id === robot.id);
+            const looks = current.filter((e) => e.kind === "task_step" && e.robot_id === robot.id);
+            const turns = current.filter((e) => e.kind === "move_result" && e.robot_id === robot.id && e.source === "task");
+            const done = [...current].reverse().find((e) => e.kind === "task_robot" && e.robot_id === robot.id);
+            const outcome = done?.outcome ?? "running";
+            const total = start.plan.steps_per_rotation * start.plan.rotations;
+            const hits = looks.filter((l) => l.detection.target_visible);
+            return (
+              <article key={robot.id} className="robot-log" style={{ borderLeftColor: ROBOT_COLORS[index % ROBOT_COLORS.length] }}>
+                <header>
+                  <b>{robot.name}</b>
+                  <span className={`outcome ${outcome}`}>{OUTCOMES[outcome] ?? outcome}</span>
+                  <span className="muted small">{looks.length}/{total} positions</span>
+                  <span className={`found-summary ${hits.length ? "yes" : ""}`}>
+                    {hits.length
+                      ? `“${start.plan.target}” seen at ${hits.length} position${hits.length === 1 ? "" : "s"}: ${hits.map((h) => `#${h.step + 1} (${h.planned_heading_deg}°)`).join(", ")}`
+                      : looks.length ? `“${start.plan.target}” not seen yet` : ""}
+                  </span>
+                </header>
+                {done?.error && <p className="small bad">{done.error}</p>}
+                <table>
+                  <thead>
+                    <tr><th>#</th><th>Heading</th><th>Photo</th><th>{start.plan.target}?</th><th>Where</th><th>Confidence</th><th>What the camera saw</th><th>Then turned</th></tr>
+                  </thead>
+                  <tbody>
+                    {looks.map((look) => {
+                      const d = look.detection;
+                      const turn = turns.find((t) => t.tick === look.step);
                       return (
-                        <div key={s.id} className={`look ${d.target_visible ? "hit" : ""} ${d.person_visible ? "person" : ""}`}>
-                          <div className="frame-wrap">
-                            <Frame frameId={s.frame_id} />
-                            <span className="look-step">#{s.step + 1} · {s.heading_turned_deg}°</span>
-                            {d.target_visible && <span className="look-hit">FOUND · {d.target_location} · {d.confidence}</span>}
-                          </div>
-                          <p className="small">{d.target_visible ? d.target_description : d.scene_summary}</p>
-                          {d.person_visible && <p className="small person-text">⚠ person ({d.person_location})</p>}
-                          <p className="small muted">{s.seconds}s{turn ? ` · then turned ${turn.yaw_deg}° (${turn.outcome.replaceAll("_", " ")})` : ""}</p>
-                        </div>
+                        <tr key={look.id} className={d.target_visible ? "hit" : ""}>
+                          <td>{look.step + 1}</td>
+                          <td>{look.planned_heading_deg}°</td>
+                          <td className="thumb"><Frame frameId={look.frame_id} /></td>
+                          <td className={d.target_visible ? "yes" : "no"}>{d.target_visible ? "YES" : "no"}</td>
+                          <td>{d.target_visible ? d.target_location : "—"}</td>
+                          <td>{d.confidence}</td>
+                          <td>
+                            {d.target_visible ? d.target_description : d.scene_summary}
+                            {d.person_visible && <span className="person-text"> · ⚠ person ({d.person_location})</span>}
+                          </td>
+                          <td>{look.step + 1 === total ? "— last" : turn ? `${turn.yaw_deg}° (${turn.outcome.replaceAll("_", " ")})` : "turning…"}</td>
+                        </tr>
                       );
                     })}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                    {outcome === "running" && looks.length < total && (
+                      <tr className="pending"><td>{looks.length + 1}</td><td colSpan={7} className="muted">taking photo…</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </article>
+            );
+          })}
         </section>
       )}
     </div>

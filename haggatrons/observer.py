@@ -212,20 +212,23 @@ PLAN_SCHEMA = {
         "steps_per_rotation": {"type": "integer"},
         "rotations": {"type": "integer"},
         "target": {"type": "string"},
-        "stop_when_found": {"type": "boolean"},
         "understood_as": {"type": "string"},
     },
-    "required": ["steps_per_rotation", "rotations", "target", "stop_when_found", "understood_as"],
+    "required": ["steps_per_rotation", "rotations", "target", "understood_as"],
     "additionalProperties": False,
 }
 PLAN_INSTRUCTIONS = (
     "You turn an operator's instruction for a team of small camera robots into a scan plan. "
-    "Each robot looks, then turns 360/steps_per_rotation degrees, repeating for the given "
-    "number of full rotations. steps_per_rotation must be 2-36 (default 8 if unstated); "
-    "rotations 1-3 (default 1). target is a short noun phrase for what to look for (default "
-    "\"person\"). stop_when_found defaults to true. understood_as restates the plan in one "
-    "plain sentence, noting anything in the instruction you could not do. Robots can only "
-    "look and turn in place; they cannot drive, speak, or manipulate objects."
+    "Each robot takes a photo, checks it for the target, then turns 360/steps_per_rotation "
+    "degrees, and always completes every position. steps_per_rotation is the number of photo "
+    "positions around one full circle, 2-36 (default 8). Operators often say \"N rotations\", "
+    "\"N turns\" or \"N steps\" when they mean N photo positions around one circle: treat any "
+    "such number as steps_per_rotation. rotations is the number of complete 360-degree circles, "
+    "1-3, and is 1 unless the operator clearly asks to go around the whole circle more than "
+    "once. target is a short noun phrase for what to look for (default \"person\"). "
+    "understood_as restates the plan in one plain sentence, noting anything in the instruction "
+    "you could not do. Robots can only look and turn in place; they cannot drive, speak, or "
+    "manipulate objects."
 )
 
 

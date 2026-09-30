@@ -48,15 +48,15 @@ function describe(event: FleetEvent): Line | null {
     case "capture":
       return { tone: "muted", title: `${bot} frame`, detail: `${e.seconds}s over ESP-NOW${e.simulated ? " · SIM" : ""}` };
     case "task":
-      return { tone: "coord", title: `Task ${e.state}`, detail: e.plan ? `look for "${e.plan.target}" · ${e.plan.steps_per_rotation} steps × ${e.plan.rotations}` : e.reason || (e.found && Object.keys(e.found).length ? `found by robot ${Object.keys(e.found).join(", ")}` : undefined) };
+      return { tone: "coord", title: `Task ${e.state}`, detail: e.plan ? `look for "${e.plan.target}" · ${e.plan.steps_per_rotation} steps × ${e.plan.rotations}` : e.reason || (e.found ? Object.entries(e.found as Record<string, number[]>).map(([rid, at]) => `robot ${rid}: ${at.length ? `seen at #${at.join(", #")}` : "not seen"}`).join(" · ") : undefined) };
     case "task_plan":
       return { tone: "vision", title: "Instruction interpreted", detail: e.plan.understood_as };
     case "task_step":
       return e.detection.target_visible
-        ? { tone: "ok", title: `${bot} FOUND "${e.target}" (${e.detection.target_location}, ${e.detection.confidence})`, detail: e.detection.target_description }
-        : { tone: e.detection.person_visible ? "person" : "muted", title: `${bot} look ${e.step + 1}/${e.of}${e.detection.person_visible ? " · ⚠ person" : ""}`, detail: e.detection.scene_summary };
+        ? { tone: "ok", title: `${bot} #${e.step + 1}/${e.of} (${e.planned_heading_deg}°): FOUND "${e.target}" (${e.detection.target_location}, ${e.detection.confidence})`, detail: e.detection.target_description }
+        : { tone: e.detection.person_visible ? "person" : "muted", title: `${bot} #${e.step + 1}/${e.of} (${e.planned_heading_deg}°): no "${e.target}"${e.detection.person_visible ? " · ⚠ person" : ""}`, detail: e.detection.scene_summary };
     case "task_robot":
-      return { tone: e.outcome === "found" ? "ok" : e.outcome === "failed" ? "bad" : "warn", title: `${bot} task: ${String(e.outcome).replaceAll("_", " ")}`, detail: e.error || e.reason };
+      return { tone: e.outcome === "completed" ? "ok" : e.outcome === "failed" ? "bad" : "warn", title: `${bot} scan ${e.outcome}`, detail: e.error || (e.found_at ? (e.found_at.length ? `target at position ${e.found_at.join(", ")}` : "target not seen") : undefined) };
     case "error":
       return { tone: "bad", title: `Error (${e.source})`, detail: e.error };
     case "worker":

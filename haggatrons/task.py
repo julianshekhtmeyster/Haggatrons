@@ -1,16 +1,21 @@
-"""Operator scan tasks: every robot looks, checks for a target, turns, and reports each step.
+"""Operator scan tasks: every robot photographs each position around a circle and logs it.
 
-An instruction such as "turn a full circle in 8 steps and look for a dog" is
-interpreted into a plan the operator can edit. Running it sends the plan to
-every online robot at once. Each step captures a frame over ESP-NOW, asks the
-visual model whether the target is in view, logs the result, then turns
-360/steps degrees through the same fleet move path (and firmware limits) as
-everything else. A person in view stops that robot unless a person is the
-target. Each task writes runs/tasks/<id>/events.jsonl.
+An instruction such as "8 rotations looking for a dog" is interpreted into a
+plan the operator can edit: 8 photo positions around one full circle. Running
+it sends the plan to every online robot at once. At every position a robot
+captures a frame over ESP-NOW, asks the visual model whether the target is in
+view, logs the result, then turns 360/steps degrees through the same fleet
+move path (and firmware limits) as everything else. Every position is always
+visited; finding the target or a person is logged, never a reason to stop.
+Only an operator stop, an e-stop, or a failed turn ends a robot's scan.
+
+Logs: runs/tasks/<id>/events.jsonl (everything) and robot-<id>.csv (one clean
+row per position per robot).
 """
 
 from __future__ import annotations
 
+import csv
 import json
 import threading
 import time
@@ -21,7 +26,8 @@ from haggatrons.config import RUNS
 from haggatrons.events import EventBus
 from haggatrons.fleet import FleetController, FleetError
 
-PERSON_WORDS = {"person", "people", "human", "humans", "man", "woman", "child", "kid", "someone", "face"}
+CSV_FIELDS = ["position", "planned_heading_deg", "measured_turn_deg", "target", "target_visible", "where",
+              "confidence", "description", "scene", "person_visible", "frame", "vision_seconds", "turn_outcome"]
 
 
 class TaskError(RuntimeError):
@@ -39,7 +45,6 @@ def validate_plan(plan: dict) -> dict:
     if not 0 < len(target) <= 100:
         raise TaskError("Say what to look for (1-100 characters)")
     return {"steps_per_rotation": steps, "rotations": rotations, "target": target,
-            "stop_when_found": bool(plan.get("stop_when_found", True)),
             "understood_as": str(plan.get("understood_as", ""))[:500]}
 
 
@@ -53,6 +58,7 @@ class ScanTask:
         self.plan: dict | None = None
         self.instruction = ""
         self.robots: dict[int, dict] = {}
+        self.log_dir = None
         self._lock = threading.Lock()
 
     @property
@@ -77,8 +83,8 @@ class ScanTask:
                 raise TaskError("No robot is online")
             self.id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
             self.plan, self.instruction, self.state = plan, instruction[:1000], "running"
-            self.robots = {rid: {"state": "running", "step": 0, "found": None} for rid in online}
-        log_dir = RUNS / "tasks" / self.id
+            self.robots = {rid: {"state": "running", "step": 0, "found": []} for rid in online}
+        self.log_dir = log_dir = RUNS / "tasks" / self.id
         log_dir.mkdir(parents=True, exist_ok=True)
         (log_dir / "task.json").write_text(json.dumps({"id": self.id, "instruction": self.instruction,
                                                        "plan": plan, "robots": online}, indent=2) + "\n")
@@ -111,8 +117,8 @@ class ScanTask:
         with self._lock:
             final = "stopped" if self.state == "stopping" else "finished"
             self.state = final
-        found = {rid: r["found"] for rid, r in self.robots.items() if r["found"]}
-        self.events.publish("task", state=final, task_id=self.id, found=found,
+        found = {rid: [f["position"] for f in r["found"]] for rid, r in self.robots.items()}
+        self.events.publish("task", state=final, task_id=self.id, found=found, log_dir=str(self.log_dir),
                             robots={rid: r["state"] for rid, r in self.robots.items()})
         self.events.log_to(None)
 
@@ -127,55 +133,65 @@ class ScanTask:
         steps = plan["steps_per_rotation"] * plan["rotations"]
         angle = 360.0 / plan["steps_per_rotation"]
         target = plan["target"]
-        looking_for_person = any(word in PERSON_WORDS for word in target.lower().replace(",", " ").split())
         cal = self.fleet.fleet.calibration
         turned = 0.0
-        for step in range(steps):
-            if self.state != "running":
-                return self._done(robot_id, "stopped", step=step)
-            self.robots[robot_id]["step"] = step + 1
-            try:
-                capture = self.fleet.capture(robot_id, "640x480")
-            except FleetError as exc:
-                return self._done(robot_id, "failed", step=step, error=f"capture: {exc}")
-            started = time.monotonic()
-            try:
-                detection, usage = detect_jpeg(capture.jpeg, target)
-            except Exception as exc:
-                return self._done(robot_id, "failed", step=step, error=f"vision: {str(exc)[:300]}")
-            found = detection["target_visible"]
-            self.events.publish("task_step", robot_id=robot_id, task_id=self.id, step=step, of=steps,
-                                heading_turned_deg=round(turned, 1), frame_id=capture.frame_id, model=MODEL,
-                                target=target, detection=detection, usage=usage,
-                                seconds=round(time.monotonic() - started, 2), simulated=capture.simulated)
-            if found:
-                self.robots[robot_id]["found"] = {"step": step, "frame_id": capture.frame_id,
-                                                  "where": detection["target_location"],
-                                                  "confidence": detection["confidence"],
-                                                  "description": detection["target_description"]}
-                if plan["stop_when_found"]:
-                    return self._done(robot_id, "found", step=step, frame_id=capture.frame_id,
-                                      where=detection["target_location"], confidence=detection["confidence"])
-            if detection["person_visible"] and not looking_for_person:
-                return self._done(robot_id, "stopped_person", step=step, frame_id=capture.frame_id,
-                                  reason="a person is in view; stopped turning for safety")
-            if step == steps - 1:
-                break
-            if self.state != "running":
-                return self._done(robot_id, "stopped", step=step)
-            timeout = int(min(p.MAX_MOVE_MS, 600 + angle / 90 * 1200))
-            try:
-                result = self.fleet.move(robot_id, p.MoveCommand(p.MOVE_TURN, cal.turn_speed, cal.turn_speed,
-                                                                 timeout, angle),
-                                         source="task", reason=f"scan step {step + 1}/{steps}: turn {angle:.0f}°",
-                                         tick=step)
-            except FleetError as exc:
-                return self._done(robot_id, "failed", step=step, error=f"turn: {exc}")
-            if result["outcome"] not in ("completed",):
-                return self._done(robot_id, "failed", step=step, error=f"turn {result['outcome']}")
-            turned += result["yaw_deg"]
+        rows = self.log_dir / f"robot-{robot_id}.csv"
+        with rows.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=CSV_FIELDS)
+            writer.writeheader()
+            for step in range(steps):
+                if self.state != "running":
+                    return self._done(robot_id, "stopped", step=step)
+                self.robots[robot_id]["step"] = step + 1
+                planned = round((step * angle) % 360, 1)
+                try:
+                    capture = self.fleet.capture(robot_id, "640x480")
+                except FleetError as exc:
+                    return self._done(robot_id, "failed", step=step, error=f"photo at position {step + 1}: {exc}")
+                started = time.monotonic()
+                try:
+                    detection, usage = detect_jpeg(capture.jpeg, target)
+                except Exception as exc:
+                    return self._done(robot_id, "failed", step=step, error=f"vision at position {step + 1}: {str(exc)[:300]}")
+                seconds = round(time.monotonic() - started, 2)
+                self.events.publish("task_step", robot_id=robot_id, task_id=self.id, step=step, of=steps,
+                                    planned_heading_deg=planned, heading_turned_deg=round(turned, 1),
+                                    frame_id=capture.frame_id, model=MODEL, target=target, detection=detection,
+                                    usage=usage, seconds=seconds, simulated=capture.simulated)
+                if detection["target_visible"]:
+                    self.robots[robot_id]["found"].append({
+                        "position": step + 1, "heading_deg": planned, "frame_id": capture.frame_id,
+                        "where": detection["target_location"], "confidence": detection["confidence"]})
+                turn_outcome = "last position"
+                if step < steps - 1:
+                    if self.state != "running":
+                        turn_outcome = "stopped"
+                    else:
+                        timeout = int(min(p.MAX_MOVE_MS, 600 + angle / 90 * 1200))
+                        try:
+                            result = self.fleet.move(
+                                robot_id, p.MoveCommand(p.MOVE_TURN, cal.turn_speed, cal.turn_speed, timeout, angle),
+                                source="task", reason=f"scan position {step + 1}/{steps}: turn {angle:.0f}°", tick=step)
+                            turn_outcome = result["outcome"]
+                            turned += result["yaw_deg"]
+                        except FleetError as exc:
+                            turn_outcome = f"failed: {exc}"
+                writer.writerow({
+                    "position": step + 1, "planned_heading_deg": planned, "measured_turn_deg": round(turned, 1),
+                    "target": target, "target_visible": detection["target_visible"],
+                    "where": detection["target_location"], "confidence": detection["confidence"],
+                    "description": detection["target_description"], "scene": detection["scene_summary"],
+                    "person_visible": detection["person_visible"], "frame": str(capture.path),
+                    "vision_seconds": seconds, "turn_outcome": turn_outcome})
+                stream.flush()
+                if turn_outcome not in ("completed", "last position"):
+                    if turn_outcome == "stopped":
+                        return self._done(robot_id, "stopped", step=step)
+                    return self._done(robot_id, "failed", step=step,
+                                      error=f"turn after position {step + 1}: {turn_outcome}")
         found = self.robots[robot_id]["found"]
-        self._done(robot_id, "found" if found else "not_found", step=steps - 1, turned_deg=round(turned, 1))
+        self._done(robot_id, "completed", step=steps - 1, turned_deg=round(turned, 1),
+                   found_at=[f["position"] for f in found], log=str(rows))
 
     def snapshot(self) -> dict:
         return {"state": self.state, "id": self.id, "plan": self.plan, "instruction": self.instruction,
