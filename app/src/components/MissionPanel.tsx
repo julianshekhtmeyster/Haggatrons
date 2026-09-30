@@ -43,7 +43,7 @@ export default function MissionPanel({ state, api, refresh }: Props) {
       {active ? (
         <>
           <p className="muted">
-            {mission.runner === "flower" ? "Flower federation" : "Local loop"} · {mission.steps} ticks
+            {mission.runner === "flower" ? "Flower federation" : "Local loop (Flower logic)"} · {mission.steps} ticks
             {mission.vision ? ` · vision ${mission.vision_used}/${mission.vision_budget} calls` : " · vision off"}
           </p>
           <div className="row">
@@ -62,7 +62,7 @@ export default function MissionPanel({ state, api, refresh }: Props) {
             <label>Runner
               <select value={runner} onChange={(e) => setRunner(e.target.value as "flower" | "local")}>
                 <option value="flower">Flower (one worker per robot)</option>
-                <option value="local">Local loop (no Flower)</option>
+                <option value="local">Local loop (Flower logic)</option>
               </select>
             </label>
             <label className="check">

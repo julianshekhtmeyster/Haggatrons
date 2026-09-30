@@ -63,3 +63,23 @@ def test_gate_blocks_collisions_and_clearance():
     assert decisions[1][1] and "robot 1" in decisions[1][1]
     tight = gate([Proposal(1, "forward", distance_m=0.3)], [report(range_mm=400)], 0.18)
     assert tight[0][1] == "would end inside the clearance margin"
+
+
+def test_person_in_view_holds_and_is_gated():
+    seen = Report(1, 0, 0.45, 0.45, 0.0, 0.02, 1500, person=True, person_location="center")
+    proposal = propose(seen, Goal(1, "frontier", (1.5, 0.45), ""), 0.18)
+    assert proposal.action == "hold" and "person" in proposal.reason
+    decision = gate([Proposal(1, "turn", turn_deg=30)], [seen], 0.18)
+    assert decision[0][1] == "a person is in view"
+
+
+def test_vision_output_requires_consistent_person_fields():
+    import pytest
+    from haggatrons.observer import validate
+
+    base = {"scene_summary": "", "visible_landmarks": [], "visual_hazards": [], "uncertainty": "",
+            "directions": {"left": "open", "center": "open", "right": "open"},
+            "proposed_action": "stop", "action_reason": ""}
+    validate({**base, "person_visible": True, "person_location": "left"})
+    with pytest.raises(ValueError):
+        validate({**base, "person_visible": True, "person_location": "none"})

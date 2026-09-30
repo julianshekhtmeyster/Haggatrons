@@ -23,6 +23,9 @@ function describe(event: FleetEvent): Line | null {
     case "observation":
       return { tone: "muted", title: `${bot} observed`, detail: `range ${e.range_mm ?? "n/a"} mm · pose (${e.pose.x}, ${e.pose.y}, ${e.pose.heading_deg}°)${e.simulated ? " · SIM" : ""}` };
     case "vision":
+      if (e.decision.person_visible) {
+        return { tone: "person", title: `⚠ ${bot} sees a PERSON (${e.decision.person_location})`, detail: `${e.decision.scene_summary} → ${e.decision.proposed_action}` };
+      }
       return { tone: "vision", title: `${bot} vision (${e.model})`, detail: `${e.decision.scene_summary} → proposes ${e.decision.proposed_action} (L ${e.decision.directions.left} · C ${e.decision.directions.center} · R ${e.decision.directions.right})` };
     case "vision_failed":
       return { tone: "warn", title: `${bot} vision failed`, detail: e.message };

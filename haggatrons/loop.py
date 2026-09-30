@@ -53,6 +53,7 @@ def observe(api: BackendClient, robot_id: int, tick: int, use_vision: bool) -> d
                                   "message": str(exc)[:500]})
         else:
             report.update(directions=decision["directions"], hazards=decision["visual_hazards"],
+                          person=decision["person_visible"], person_location=decision["person_location"],
                           summary=decision["scene_summary"],
                           confidence=0.3 if decision["uncertainty"] else 0.5)
             api.post("/api/log", {"kind": "vision", "robot_id": robot_id, "tick": tick, "model": MODEL,
@@ -89,7 +90,8 @@ def _report(data: dict) -> Report:
                   range_mm=None if data.get("range_mm") is None else int(data["range_mm"]),
                   directions=data.get("directions"), hazards=list(data.get("hazards") or []),
                   summary=str(data.get("summary") or ""), confidence=float(data.get("confidence", 0.5)),
-                  online=bool(data.get("online", True)))
+                  online=bool(data.get("online", True)), person=bool(data.get("person", False)),
+                  person_location=str(data.get("person_location", "none")))
 
 
 # ------------------------------------------------------------------ coordinator

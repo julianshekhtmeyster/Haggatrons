@@ -13,6 +13,7 @@ from pathlib import Path
 MODEL = "gpt-6-luna"
 ACTIONS = {"look_left", "look_right", "look_forward", "advance_short", "stop"}
 STATES = {"open", "blocked", "uncertain"}
+PERSON_LOCATIONS = {"none", "left", "center", "right", "multiple"}
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -27,12 +28,14 @@ SCHEMA = {
         },
         "visual_hazards": {"type": "array", "items": {"type": "string"}},
         "uncertainty": {"type": "string"},
+        "person_visible": {"type": "boolean"},
+        "person_location": {"type": "string", "enum": sorted(PERSON_LOCATIONS)},
         "proposed_action": {"type": "string", "enum": sorted(ACTIONS)},
         "action_reason": {"type": "string"},
     },
     "required": [
         "scene_summary", "visible_landmarks", "directions", "visual_hazards",
-        "uncertainty", "proposed_action", "action_reason",
+        "uncertainty", "person_visible", "person_location", "proposed_action", "action_reason",
     ],
     "additionalProperties": False,
 }
@@ -44,7 +47,10 @@ INSTRUCTIONS = (
     "If the view is dark, blurry, pointed upward, or otherwise insufficient, mark "
     "directions uncertain and propose a look or stop. Propose exactly one bounded "
     "action; another component will decide whether to allow it. Never claim that "
-    "an action has been executed. Return JSON matching the schema."
+    "an action has been executed. Set person_visible to true if any person or part "
+    "of a person (face, hand, leg, foot) is in the image, and give where it is; "
+    "otherwise false and \"none\". A visible person is always a hazard: never "
+    "propose advance_short toward one. Return JSON matching the schema."
 )
 
 
@@ -55,6 +61,10 @@ def validate(value: object) -> dict:
         raise ValueError("Invalid direction fields")
     if any(state not in STATES for state in value["directions"].values()):
         raise ValueError("Invalid direction state")
+    if not isinstance(value["person_visible"], bool) or value["person_location"] not in PERSON_LOCATIONS:
+        raise ValueError("Invalid person fields")
+    if value["person_visible"] != (value["person_location"] != "none"):
+        raise ValueError("person_visible conflicts with person_location")
     if value["proposed_action"] not in ACTIONS:
         raise ValueError("Invalid proposed action")
     if value["proposed_action"] == "advance_short" and value["directions"]["center"] != "open":

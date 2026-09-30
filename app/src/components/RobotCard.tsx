@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Api } from "../api";
 import type { FleetEvent, FleetState, Robot } from "../types";
-import { VisionBlock } from "./Trace";
+import { PersonBadge, VisionBlock } from "./Trace";
 
 interface Props {
   robot: Robot;
@@ -44,8 +44,10 @@ export default function RobotCard({ robot, fleet, missionActive, api, refresh, v
     act("forward", `/api/robots/${robot.id}/move`, { kind: "forward", left: speed, right: speed, duration_ms: JOG_FORWARD_MS });
 
   const linkAge = robot.radio?.last_rx_age_ms;
+  // Flag a person only while the analysed frame is the one on screen.
+  const seesPerson = Boolean((vision as any)?.decision?.person_visible && (vision as any)?.frame_id === frameId);
   return (
-    <article className={`robot ${robot.online ? "" : "offline"} ${robot.moving ? "moving" : ""}`}>
+    <article className={`robot ${robot.online ? "" : "offline"} ${robot.moving ? "moving" : ""} ${seesPerson ? "person" : ""}`}>
       <header>
         <span className={`dot ${robot.online ? (t?.link_ok ? "ok" : "warn") : "off"}`} />
         <div>
@@ -60,6 +62,7 @@ export default function RobotCard({ robot, fleet, missionActive, api, refresh, v
       <div className="camera">
         {image ? <img src={image} alt={`${robot.name} camera`} /> : <div className="placeholder">No frame yet</div>}
         {robot.last_capture?.simulated && <span className="sim-tag">SIM</span>}
+        {seesPerson && <PersonBadge location={(vision as any).decision.person_location} />}
       </div>
 
       <dl className="stats">

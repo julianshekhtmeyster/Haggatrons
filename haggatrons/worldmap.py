@@ -71,6 +71,8 @@ class Report:
     summary: str = ""
     confidence: float = 0.5
     online: bool = True
+    person: bool = False
+    person_location: str = "none"
 
 
 @dataclass
@@ -246,6 +248,8 @@ def propose(report: Report, goal: Goal, clearance_m: float, step_m: float = 0.3)
     rid = report.robot_id
     if goal.kind == "hold" or not report.online:
         return Proposal(rid, "hold", reason=goal.reason)
+    if report.person:
+        return Proposal(rid, "hold", reason=f"person in view ({report.person_location}): holding position")
     if goal.kind == "scan" or goal.target is None:
         return Proposal(rid, "turn", turn_deg=60.0, reason="scan: rotate 60° to look for open space")
     dx, dy = goal.target[0] - report.x, goal.target[1] - report.y
@@ -281,6 +285,8 @@ def gate(proposals: list[Proposal], reports: list[Report], clearance_m: float) -
         refusal = None
         if report is None or not report.online:
             refusal = "robot offline"
+        elif proposal.action != "hold" and report.person:
+            refusal = "a person is in view"
         elif proposal.action == "forward":
             if report.range_mm is None:
                 refusal = "no range reading"

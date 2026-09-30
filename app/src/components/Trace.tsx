@@ -21,10 +21,15 @@ export function Frame({ frameId, className }: { frameId?: string; className?: st
   return url ? <img className={`frame ${className ?? ""}`} src={url} alt={frameId} /> : <div className={`frame ${className ?? ""}`} />;
 }
 
+export function PersonBadge({ location }: { location: string }) {
+  return <div className="person-badge">⚠ PERSON DETECTED{location && location !== "multiple" ? ` · ${location}` : location === "multiple" ? " · several" : ""}</div>;
+}
+
 export function VisionBlock({ event }: { event: AnyEvent }) {
   const d = event.decision;
   return (
-    <div className="vision-block">
+    <div className={`vision-block ${d.person_visible ? "person" : ""}`}>
+      {d.person_visible && <PersonBadge location={d.person_location} />}
       <div className="vision-head">
         <span className="tag ai">{event.model}</span>
         <span className="muted">{event.seconds}s · {event.usage?.total_tokens ?? "?"} tokens{event.source === "manual" ? " · manual" : ""}</span>
@@ -61,7 +66,7 @@ export default function Trace({ events, robots }: Props) {
   return (
     <div className="trace">
       <div className="trace-meta muted">
-        Mission {start.mission_id} · {start.runner}{start.simulated ? " · SIMULATED" : " · hardware"} · vision {start.vision ? "on" : "off"}
+        Mission {start.mission_id} · {start.runner === "flower" ? "Flower federation" : "local loop (Flower logic)"}{start.simulated ? " · SIMULATED" : " · hardware"} · vision {start.vision ? "on" : "off"}
         {end && ` · ${end.state}${end.error ? `: ${end.error}` : ""}`}
       </div>
       {ticks.length === 0 && <p className="muted">Waiting for the first tick…</p>}
@@ -90,7 +95,10 @@ export default function Trace({ events, robots }: Props) {
                 return (
                   <article key={robot.id} className="step" style={{ borderTopColor: ROBOT_COLORS[index % ROBOT_COLORS.length] }}>
                     <h3>{robot.name}</h3>
-                    <Frame frameId={obs?.frame_id} />
+                    <div className="frame-wrap">
+                      <Frame frameId={obs?.frame_id} />
+                      {vision?.decision?.person_visible && <PersonBadge location={vision.decision.person_location} />}
+                    </div>
                     <p className="small muted">
                       {obs ? `range ${obs.range_mm ?? "n/a"} mm · pose (${obs.pose.x}, ${obs.pose.y}) ${obs.pose.heading_deg}°` : worker ? worker.message : "no observation"}
                     </p>
