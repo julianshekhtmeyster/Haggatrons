@@ -224,3 +224,34 @@ button.estop:hover { background: #da3633 !important; }
 .events li.person { border-left-color: var(--bad); background: rgba(248, 81, 73, 0.08); }
 .events li.person strong { color: #ff7b72; }
 @keyframes person-pulse { 50% { box-shadow: 0 0 0 6px rgba(248, 81, 73, 0.15); } }
+
+/* scan task */
+.task { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
+.task-compose { display: grid; gap: 8px; }
+.task textarea { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; resize: vertical; }
+.task .row { display: flex; gap: 8px; align-items: center; }
+.task .row .primary { width: auto; padding: 8px 18px; }
+.plan { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.plan label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.plan label.grow { flex: 1; min-width: 160px; }
+.plan label.grow input { width: 100%; }
+.plan label.check { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.understood { color: var(--accent); }
+.small.warn, .warn { color: var(--warn); }
+.task-robots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.task-robot { background: var(--panel-2); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 8px; padding: 10px; }
+.task-robot.found { border-color: var(--ok); box-shadow: 0 0 0 2px rgba(63, 185, 80, 0.3); }
+.task-robot header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.outcome { font-weight: 700; font-size: 12px; }
+.outcome.found { color: var(--ok); }
+.outcome.failed, .outcome.stopped_person { color: var(--bad); }
+.outcome.running { color: var(--accent); }
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.look { border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+.look.hit { border-color: var(--ok); background: rgba(63, 185, 80, 0.08); }
+.look.person { border-color: var(--bad); }
+.look p { margin: 3px 0 0; font-size: 11px; }
+.look-step { position: absolute; top: 4px; left: 4px; background: rgba(0, 0, 0, 0.65); font-size: 10px; padding: 1px 5px; border-radius: 3px; }
+.look-hit { position: absolute; bottom: 4px; left: 4px; right: 4px; background: #238636; color: white; font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; text-align: center; }
+.person-text { color: #ff7b72; font-weight: 600; }
+.pill.finished { color: var(--ok); border-color: var(--ok); }

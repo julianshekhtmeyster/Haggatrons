@@ -47,6 +47,16 @@ function describe(event: FleetEvent): Line | null {
       return { tone: "warn", title: `${bot} rejected request`, detail: e.reason };
     case "capture":
       return { tone: "muted", title: `${bot} frame`, detail: `${e.seconds}s over ESP-NOW${e.simulated ? " · SIM" : ""}` };
+    case "task":
+      return { tone: "coord", title: `Task ${e.state}`, detail: e.plan ? `look for "${e.plan.target}" · ${e.plan.steps_per_rotation} steps × ${e.plan.rotations}` : e.reason || (e.found && Object.keys(e.found).length ? `found by robot ${Object.keys(e.found).join(", ")}` : undefined) };
+    case "task_plan":
+      return { tone: "vision", title: "Instruction interpreted", detail: e.plan.understood_as };
+    case "task_step":
+      return e.detection.target_visible
+        ? { tone: "ok", title: `${bot} FOUND "${e.target}" (${e.detection.target_location}, ${e.detection.confidence})`, detail: e.detection.target_description }
+        : { tone: e.detection.person_visible ? "person" : "muted", title: `${bot} look ${e.step + 1}/${e.of}${e.detection.person_visible ? " · ⚠ person" : ""}`, detail: e.detection.scene_summary };
+    case "task_robot":
+      return { tone: e.outcome === "found" ? "ok" : e.outcome === "failed" ? "bad" : "warn", title: `${bot} task: ${String(e.outcome).replaceAll("_", " ")}`, detail: e.error || e.reason };
     case "error":
       return { tone: "bad", title: `Error (${e.source})`, detail: e.error };
     case "worker":

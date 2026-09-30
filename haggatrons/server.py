@@ -20,6 +20,7 @@ from haggatrons.events import EventBus
 from haggatrons.fleet import FleetController, FleetError
 from haggatrons.link import SerialLink, list_serial_ports
 from haggatrons.mission import Mission, MissionError
+from haggatrons.task import ScanTask, TaskError
 
 
 STATIC_DIR = ROOT / "app" / "dist"
@@ -44,6 +45,7 @@ class Backend:
         self.token = token
         self.make_sim_link = make_sim_link
         self.mission: Mission | None = None  # set once the server knows its URL
+        self.task: ScanTask | None = None
         self.coordinator: dict | None = None
         self.ui_required = False  # set by `serve`; headless missions and tests have no page
         self.ui_streams = 0
@@ -53,7 +55,7 @@ class Backend:
     def route(self, method: str, path: str, body: dict) -> object:
         fleet, mission = self.fleet, self.mission
         if method == "GET" and path == "/api/state":
-            return {"fleet": fleet.snapshot(), "mission": mission.snapshot(),
+            return {"fleet": fleet.snapshot(), "mission": mission.snapshot(), "task": self.task.snapshot(),
                     "coordinator": self.coordinator, "events": self.events.recent(150)}
         if method == "GET" and path == "/api/ports":
             return {"ports": list_serial_ports()}
@@ -74,6 +76,7 @@ class Backend:
         if method == "POST" and path == "/api/estop":
             fleet.emergency_stop(body.get("reason", "operator"))
             mission.stop("e-stop")
+            self.task.stop("e-stop")
             return fleet.snapshot()
         if method == "POST" and path == "/api/estop/clear":
             fleet.clear_estop()
@@ -85,6 +88,8 @@ class Backend:
             self.coordinator = None
             return fleet.snapshot()
         if method == "POST" and path == "/api/mission/start":
+            if self.task.running:
+                raise ApiError(409, "A scan task is running; stop it first")
             return mission.start(int(body.get("steps", 12)), bool(body.get("vision", False)),
                                  int(body.get("vision_budget", 4)), str(body.get("runner", "flower")))
         if method == "POST" and path == "/api/mission/pause":
@@ -96,6 +101,27 @@ class Backend:
         if method == "POST" and path == "/api/mission/stop":
             mission.stop()
             return mission.snapshot()
+        if method == "POST" and path == "/api/task/plan":
+            from haggatrons.observer import load_api_key, plan_task
+
+            instruction = str(body.get("instruction", "")).strip()
+            if not load_api_key():
+                raise ApiError(409, "No OpenAI key: put OPENAI_API_KEY=... in the project .env")
+            try:
+                plan, usage = plan_task(instruction)
+            except ValueError as exc:
+                raise ApiError(400, str(exc)) from None
+            except Exception as exc:
+                raise ApiError(502, f"Could not interpret the instruction: {str(exc)[:300]}") from None
+            self.events.publish("task_plan", instruction=instruction, plan=plan, usage=usage)
+            return plan
+        if method == "POST" and path == "/api/task/start":
+            if mission.state in ("running", "paused"):
+                raise ApiError(409, "Stop the mission before running a task")
+            return self.task.start(body.get("plan") or {}, str(body.get("instruction", "")))
+        if method == "POST" and path == "/api/task/stop":
+            self.task.stop()
+            return self.task.snapshot()
         if method == "POST" and path == "/api/vision/claim":
             return {"granted": mission.claim_vision(), "used": mission.vision_used,
                     "budget": mission.vision_budget}
@@ -291,7 +317,7 @@ def make_handler(backend: Backend):
                 self._send(200, backend.route(method, url.path, body))
             except ApiError as exc:
                 self._send(exc.status, {"error": str(exc)})
-            except (FleetError, MissionError) as exc:
+            except (FleetError, MissionError, TaskError) as exc:
                 self._send(409, {"error": str(exc)})
             except (KeyError, ValueError, TypeError) as exc:
                 self._send(400, {"error": f"bad request: {exc}"})
@@ -342,6 +368,19 @@ class ApiServer:
         self.httpd.daemon_threads = True
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
         backend.mission = Mission(backend.fleet, backend.events, self.url, backend.token)
+        backend.task = ScanTask(backend.fleet, backend.events,
+                                lambda: backend.mission.state in ("running", "paused"))
+        mission_gate = backend.fleet.mission_gate
+
+        def gate(robot_id: int, source: str) -> str | None:
+            # Task turns are allowed only while a task runs; nothing else moves meanwhile.
+            if source == "task":
+                return None if backend.task.state == "running" else "no scan task is running"
+            if backend.task.running:
+                return "a scan task is running"
+            return mission_gate(robot_id, source)
+
+        backend.fleet.mission_gate = gate
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -360,6 +399,8 @@ class ApiServer:
             elif backend.ui_required and time.monotonic() - backend.ui_last_seen > UI_GRACE_S:
                 if backend.mission and backend.mission.state in ("running", "paused"):
                     backend.mission.stop("control page closed")
+                if backend.task and backend.task.running:
+                    backend.task.stop("control page closed")
                 if backend.fleet.armed:
                     backend.fleet.disarm(reason="control page closed")
 

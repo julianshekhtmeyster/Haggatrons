@@ -7,6 +7,7 @@ import MapView from "./components/MapView";
 import MissionPanel from "./components/MissionPanel";
 import EventLog from "./components/EventLog";
 import Trace from "./components/Trace";
+import TaskPanel from "./components/TaskPanel";
 
 const MAX_EVENTS = 600;
 
@@ -16,7 +17,7 @@ export default function App() {
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
   const [backend, setBackend] = useState<{ running: boolean; log: string[] }>({ running: false, log: [] });
   const toastId = useRef(0);
-  const [view, setView] = useState<"map" | "trace">("map");
+  const [view, setView] = useState<"map" | "trace" | "task">("map");
 
   const notify = useCallback((text: string) => {
     const id = ++toastId.current;
@@ -40,7 +41,7 @@ export default function App() {
     const offEvent = window.haggatrons.onEvent((event) => {
       if (event.kind === "telemetry") return; // polled state carries telemetry
       setEvents((current) => (current.some((e) => e.id === event.id) ? current : [...current.slice(-MAX_EVENTS), event]));
-      if (["safety", "mission", "link", "coordinator", "move_result", "capture", "vision"].includes(event.kind)) refresh();
+      if (["safety", "mission", "link", "coordinator", "move_result", "capture", "vision", "task", "task_robot"].includes(event.kind)) refresh();
       if (event.kind === "mission" && event.state === "running" && !event.resumed) setView("trace");
     });
     const timer = setInterval(refresh, 500);
@@ -72,7 +73,8 @@ export default function App() {
     );
   }
 
-  const missionActive = state.mission.state === "running" || state.mission.state === "paused";
+  const missionActive = state.mission.state === "running" || state.mission.state === "paused"
+    || state.task.state === "running" || state.task.state === "stopping";
   return (
     <div className={`app ${state.fleet.estop ? "estopped" : state.fleet.armed ? "armed" : ""}`}>
       <TopBar state={state} api={api} refresh={refresh} />
@@ -88,8 +90,11 @@ export default function App() {
           <div className="tabs">
             <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>Shared map</button>
             <button className={view === "trace" ? "active" : ""} onClick={() => setView("trace")}>AI trace</button>
+            <button className={view === "task" ? "active" : ""} onClick={() => setView("task")}>Task</button>
           </div>
-          {view === "map" ? <MapView fleet={state.fleet} coordinator={state.coordinator} /> : <Trace events={events} robots={state.fleet.robots} />}
+          {view === "map" && <MapView fleet={state.fleet} coordinator={state.coordinator} />}
+          {view === "trace" && <Trace events={events} robots={state.fleet.robots} />}
+          {view === "task" && <TaskPanel state={state} events={events} api={api} refresh={refresh} />}
         </section>
         <section className="side">
           <MissionPanel state={state} api={api} refresh={refresh} />
