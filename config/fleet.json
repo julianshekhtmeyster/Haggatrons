@@ -9,7 +9,8 @@
     "cruise_speed": 450,
     "turn_speed": 420,
     "min_clear_mm": 180,
-    "max_speed": 600
+    "max_speed": 600,
+    "spin_deg_per_s": 21.0
   },
   "robots": [
     {

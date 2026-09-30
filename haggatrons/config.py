@@ -23,6 +23,8 @@ class Calibration:
     turn_speed: int = 420
     min_clear_mm: int = 180
     max_speed: int = 600
+    # Timed in-place spin rate at turn_speed (scan tasks spin by time, not gyro).
+    spin_deg_per_s: float = 21.0
 
 
 @dataclass(frozen=True)

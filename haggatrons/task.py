@@ -26,7 +26,9 @@ from haggatrons.config import RUNS
 from haggatrons.events import EventBus
 from haggatrons.fleet import FleetController, FleetError
 
-CSV_FIELDS = ["position", "planned_heading_deg", "measured_turn_deg", "target", "target_visible", "where",
+SPIN_CHUNK_MS = 450  # under the firmware's 500 ms cap for drives without a range reading
+
+CSV_FIELDS = ["position", "planned_heading_deg", "gyro_turn_deg", "target", "target_visible", "where",
               "confidence", "description", "scene", "person_visible", "frame", "vision_seconds", "turn_outcome"]
 
 
@@ -164,20 +166,10 @@ class ScanTask:
                         "where": detection["target_location"], "confidence": detection["confidence"]})
                 turn_outcome = "last position"
                 if step < steps - 1:
-                    if self.state != "running":
-                        turn_outcome = "stopped"
-                    else:
-                        timeout = int(min(p.MAX_MOVE_MS, 800 + angle / 90 * 2000))
-                        try:
-                            result = self.fleet.move(
-                                robot_id, p.MoveCommand(p.MOVE_TURN, cal.turn_speed, cal.turn_speed, timeout, angle),
-                                source="task", reason=f"scan position {step + 1}/{steps}: turn {angle:.0f}°", tick=step)
-                            turn_outcome = result["outcome"]
-                            turned += result["yaw_deg"]
-                        except FleetError as exc:
-                            turn_outcome = f"failed: {exc}"
+                    turn_outcome, spun = self._spin(robot_id, angle, step, steps, cal)
+                    turned += spun
                 writer.writerow({
-                    "position": step + 1, "planned_heading_deg": planned, "measured_turn_deg": round(turned, 1),
+                    "position": step + 1, "planned_heading_deg": planned, "gyro_turn_deg": round(turned, 1),
                     "target": target, "target_visible": detection["target_visible"],
                     "where": detection["target_location"], "confidence": detection["confidence"],
                     "description": detection["target_description"], "scene": detection["scene_summary"],
@@ -192,6 +184,29 @@ class ScanTask:
         found = self.robots[robot_id]["found"]
         self._done(robot_id, "completed", step=steps - 1, turned_deg=round(turned, 1),
                    found_at=[f["position"] for f in found], log=str(rows))
+
+    def _spin(self, robot_id: int, angle: float, step: int, steps: int, cal) -> tuple[str, float]:
+        """Timed spin in place: left wheel back, right wheel forward, for angle / spin rate."""
+        total_ms = int(angle / max(1.0, cal.spin_deg_per_s) * 1000)
+        chunks = max(1, -(-total_ms // SPIN_CHUNK_MS))
+        chunk_ms = max(50, total_ms // chunks)
+        yaw = 0.0
+        for index in range(chunks):
+            if self.state != "running":
+                return "stopped", yaw
+            try:
+                result = self.fleet.move(
+                    robot_id, p.MoveCommand(p.MOVE_DRIVE, -cal.turn_speed, cal.turn_speed, chunk_ms),
+                    source="task", tick=step,
+                    reason=f"scan position {step + 1}/{steps}: spin ~{angle:.0f}° ({index + 1}/{chunks})")
+            except FleetError as exc:
+                return f"failed: {exc}", yaw
+            yaw += result["yaw_deg"]  # informational only
+            if result["outcome"] != "completed":
+                return result["outcome"], yaw
+        self.events.publish("task_spin", robot_id=robot_id, task_id=self.id, step=step, target_deg=round(angle, 1),
+                            spin_ms=chunk_ms * chunks, moves=chunks, gyro_deg=round(yaw, 1))
+        return "completed", yaw
 
     def snapshot(self) -> dict:
         return {"state": self.state, "id": self.id, "plan": self.plan, "instruction": self.instruction,

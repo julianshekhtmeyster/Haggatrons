@@ -117,7 +117,7 @@ export default function TaskPanel({ state, events, api, refresh }: Props) {
           {state.fleet.robots.filter((r) => start.robots.includes(r.id)).map((robot) => {
             const index = state.fleet.robots.findIndex((r) => r.id === robot.id);
             const looks = current.filter((e) => e.kind === "task_step" && e.robot_id === robot.id);
-            const turns = current.filter((e) => e.kind === "move_result" && e.robot_id === robot.id && e.source === "task");
+            const spins = current.filter((e) => e.kind === "task_spin" && e.robot_id === robot.id);
             const done = [...current].reverse().find((e) => e.kind === "task_robot" && e.robot_id === robot.id);
             const outcome = done?.outcome ?? "running";
             const total = start.plan.steps_per_rotation * start.plan.rotations;
@@ -137,12 +137,12 @@ export default function TaskPanel({ state, events, api, refresh }: Props) {
                 {done?.error && <p className="small bad">{done.error}</p>}
                 <table>
                   <thead>
-                    <tr><th>#</th><th>Heading</th><th>Photo</th><th>{start.plan.target}?</th><th>Where</th><th>Confidence</th><th>What the camera saw</th><th>Then turned</th></tr>
+                    <tr><th>#</th><th>Heading</th><th>Photo</th><th>{start.plan.target}?</th><th>Where</th><th>Confidence</th><th>What the camera saw</th><th>Then spun</th></tr>
                   </thead>
                   <tbody>
                     {looks.map((look) => {
                       const d = look.detection;
-                      const turn = turns.find((t) => t.tick === look.step);
+                      const spin = spins.find((t) => t.step === look.step);
                       return (
                         <tr key={look.id} className={d.target_visible ? "hit" : ""}>
                           <td>{look.step + 1}</td>
@@ -155,7 +155,7 @@ export default function TaskPanel({ state, events, api, refresh }: Props) {
                             {d.target_visible ? d.target_description : d.scene_summary}
                             {d.person_visible && <span className="person-text"> · ⚠ person ({d.person_location})</span>}
                           </td>
-                          <td>{look.step + 1 === total ? "— last" : turn ? `${turn.yaw_deg}° (${turn.outcome.replaceAll("_", " ")})` : "turning…"}</td>
+                          <td>{look.step + 1 === total ? "— last" : spin ? `spun ~${spin.target_deg}° (${(spin.spin_ms / 1000).toFixed(1)} s)` : outcome === "running" ? "spinning…" : "—"}</td>
                         </tr>
                       );
                     })}
